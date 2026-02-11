@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'services/api_service.dart';
 import 'lesson_player_page.dart';
+import 'quiz_intro_page.dart'; // Ensure this points to your new Quiz Intro file
 
 class CourseDetailsPage extends StatefulWidget {
   final int courseId;
@@ -128,28 +129,56 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
             ),
             children: lessons.map((item) {
               bool isDone = _toBool(item['is_completed']);
+              String type = item['type'] ?? 'tutor_lesson';
+              bool isQuiz = type == 'tutor_quiz';
 
               return ListTile(
                 leading: Icon(
-                  isDone ? Icons.check_circle : Icons.play_circle_outline,
+                  isDone
+                      ? Icons.check_circle
+                      : (isQuiz
+                            ? Icons.help_outline
+                            : Icons.play_circle_outline),
                   color: isDone ? Colors.green : primaryBrown,
                 ),
                 title: Text(
                   item['title'],
                   style: const TextStyle(color: Colors.black),
                 ),
+                subtitle: isQuiz
+                    ? const Text("Quiz", style: TextStyle(fontSize: 12))
+                    : null,
                 onTap: () async {
-                  // Await the navigation so we refresh when the user returns
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (c) => LessonPlayerPage(
-                        lessonId: int.parse(item['id'].toString()),
-                        allLessonIds: allItemIds,
+                  bool? needsRefresh;
+
+                  if (isQuiz) {
+                    // Navigate to the Quiz Intro Page for the 3-page flow
+                    needsRefresh = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (c) => QuizIntroPage(
+                          quizId: int.parse(item['id'].toString()),
+                          quizTitle: item['title'],
+                        ),
                       ),
-                    ),
-                  );
-                  _refreshCurriculum();
+                    );
+                  } else {
+                    // Standard navigation to the Lesson Player
+                    needsRefresh = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (c) => LessonPlayerPage(
+                          lessonId: int.parse(item['id'].toString()),
+                          allLessonIds: allItemIds,
+                        ),
+                      ),
+                    );
+                  }
+
+                  // If any page returned 'true' (meaning progress changed), refresh the UI
+                  if (needsRefresh == true) {
+                    _refreshCurriculum();
+                  }
                 },
               );
             }).toList(),

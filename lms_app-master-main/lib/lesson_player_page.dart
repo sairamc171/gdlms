@@ -3,6 +3,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'services/api_service.dart';
 import 'dart:async';
+import 'quiz_page.dart';
 
 class LessonPlayerPage extends StatefulWidget {
   final int lessonId;
@@ -95,21 +96,37 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
     }
   }
 
-  void _handleNavigation(dynamic nextId) {
-    _cleanupResources();
+  /* UPDATE _handleNavigation logic */
+  void _handleNavigation(dynamic nextId) async {
+    if (nextId == null || nextId == 0) {
+      Navigator.pop(context, true);
+      return;
+    }
 
-    if (nextId != null && nextId != 0 && nextId != "0") {
+    // Fetch details of the next item to check if it's a quiz
+    final nextData = await apiService.getLessonDetails(
+      int.parse(nextId.toString()),
+    );
+    if (nextData == null) return;
+
+    if (nextData['type'] == 'quiz') {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => LessonPlayerPage(
-            lessonId: int.parse(nextId.toString()),
+          builder: (c) =>
+              QuizPage(quizId: nextData['id'], title: nextData['title']),
+        ),
+      );
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (c) => LessonPlayerPage(
+            lessonId: nextData['id'],
             allLessonIds: widget.allLessonIds,
           ),
         ),
       );
-    } else {
-      Navigator.pop(context);
     }
   }
 

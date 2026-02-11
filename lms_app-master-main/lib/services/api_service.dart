@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:lms_login_app/models/quiz_models.dart';
 
 class ApiService {
   final String baseUrl = "https://lms.gdcollege.ca/wp-json";
@@ -142,7 +143,7 @@ class ApiService {
     return null;
   }
 
-  Future<List<dynamic>> getQuizQuestions(int quizId) async {
+  Future<List<QuizQuestion>> getQuizQuestions(int quizId) async {
     try {
       final response = await http.get(
         Uri.parse("$baseUrl/$customNamespace/quiz-questions/$quizId"),
@@ -150,10 +151,27 @@ class ApiService {
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['questions'] ?? [];
+        final List questions = data['questions'] ?? [];
+        return questions.map((q) => QuizQuestion.fromJson(q)).toList();
       }
     } catch (e) {
       debugPrint("Quiz Questions Error: $e");
+    }
+    return [];
+  }
+
+  Future<List<dynamic>> getQuizAttempts(int quizId) async {
+    try {
+      final response = await http.get(
+        Uri.parse("$baseUrl/$customNamespace/quiz-attempts/$quizId"),
+        headers: _headers,
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['attempts'] ?? [];
+      }
+    } catch (e) {
+      debugPrint("Quiz Attempts Error: $e");
     }
     return [];
   }
