@@ -126,19 +126,32 @@ class ApiService {
   Future<Map<String, dynamic>?> syncLessonWithWebsite(
     int itemId, {
     String itemType = 'lesson',
+    int earnedMarks = 0,
   }) async {
+    final payload = {
+      'item_id': itemId,
+      'item_type': itemType,
+      'earned_marks': earnedMarks,
+    };
+
+    debugPrint(
+      "📡 API SYNC START - Type: $itemType, ID: $itemId, Marks: $earnedMarks",
+    );
+
     try {
       final response = await http.post(
         Uri.parse("$baseUrl/$customNamespace/sync-lesson-status"),
         headers: _headers,
-        body: jsonEncode({'item_id': itemId, 'item_type': itemType}),
+        body: jsonEncode(payload),
       );
+
+      debugPrint("📥 API SYNC BODY: ${response.body}");
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
     } catch (e) {
-      debugPrint("Sync Error: $e");
+      debugPrint("🧨 API CRASH - Error: $e");
     }
     return null;
   }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/quiz_models.dart';
 import '../services/api_service.dart';
-import 'quiz_result_page.dart'; // Ensure this exists
+import 'quiz_result_page.dart';
 
 class QuizTakingPage extends StatefulWidget {
   final int quizId;
@@ -15,23 +15,17 @@ class _QuizTakingPageState extends State<QuizTakingPage> {
   late Future<List<QuizQuestion>> _loadQuizFuture;
   int _currentIndex = 0;
   int? _selectedOptionHash;
-
-  // 🆕 TRACK SCORE
   int _correctAnswersCount = 0;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
-    // Use the Custom API directly
     _loadQuizFuture = _initQuizSequence();
   }
 
   Future<List<QuizQuestion>> _initQuizSequence() async {
-    try {
-      return await apiService.getQuizQuestions(widget.quizId);
-    } catch (e) {
-      return [];
-    }
+    return await apiService.getQuizQuestions(widget.quizId);
   }
 
   @override
@@ -43,7 +37,7 @@ class _QuizTakingPageState extends State<QuizTakingPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black,
-        automaticallyImplyLeading: false, // Prevents accidental back navigation
+        automaticallyImplyLeading: false,
       ),
       body: FutureBuilder<List<QuizQuestion>>(
         future: _loadQuizFuture,
@@ -68,7 +62,6 @@ class _QuizTakingPageState extends State<QuizTakingPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -89,8 +82,6 @@ class _QuizTakingPageState extends State<QuizTakingPage> {
                   ],
                 ),
                 const SizedBox(height: 20),
-
-                // Question Text
                 Text(
                   "${_currentIndex + 1}. ${currentQuestion.text}",
                   style: const TextStyle(
@@ -99,15 +90,11 @@ class _QuizTakingPageState extends State<QuizTakingPage> {
                   ),
                 ),
                 const SizedBox(height: 30),
-
-                // Options List
                 Expanded(
                   child: SingleChildScrollView(
                     child: _buildOptions(currentQuestion),
                   ),
                 ),
-
-                // Navigation Button
                 SizedBox(
                   width: double.infinity,
                   height: 55,
@@ -118,57 +105,95 @@ class _QuizTakingPageState extends State<QuizTakingPage> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    // 🚀 NEXT / FINISH LOGIC
-                    onPressed: () async {
-                      if (_selectedOptionHash == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Please select an answer"),
-                          ),
-                        );
-                        return;
-                      }
+                    onPressed: _isSubmitting
+                        ? null
+                        : () async {
+                            if (_selectedOptionHash == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text("Please select an answer"),
+                                ),
+                              );
+                              return;
+                            }
 
-                      final selectedOption = currentQuestion.options.firstWhere(
-                        (o) => o.text.hashCode == _selectedOptionHash,
-                        orElse: () => QuizOption(text: '', isCorrect: false),
-                      );
+                            final selectedOption = currentQuestion.options
+                                .firstWhere(
+                                  (o) => o.text.hashCode == _selectedOptionHash,
+                                  orElse: () =>
+                                      QuizOption(text: '', isCorrect: false),
+                                );
 
-                      if (selectedOption.isCorrect) _correctAnswersCount++;
+                            if (selectedOption.isCorrect)
+                              _correctAnswersCount++;
 
-                      if (_currentIndex < questions.length - 1) {
-                        setState(() {
-                          _currentIndex++;
-                          _selectedOptionHash = null;
-                        });
-                      } else {
-                        // 🏁 SYNC PROGRESS WITH THE WEBSITE
-                        // Pass 'itemType: quiz' to trigger Tutor LMS completion
-                        await apiService.syncLessonWithWebsite(
-                          widget.quizId,
-                          itemType: 'quiz',
-                        );
+                            if (_currentIndex < questions.length - 1) {
+                              setState(() {
+                                _currentIndex++;
+                                _selectedOptionHash = null;
+                              });
+                            } else {
+                              setState(() => _isSubmitting = true);
 
-                        if (!mounted) return;
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => QuizResultPage(
-                              totalQuestions: questions.length,
-                              correctAnswers: _correctAnswersCount,
+                              debugPrint(
+                                "🛠 Attempting to sync Quiz ID: ${widget.quizId} with Score: $_correctAnswersCount",
+                              );
+
+                              final result = await apiService
+                                  .syncLessonWithWebsite(
+                                    widget.quizId,
+                                    itemType: 'quiz',
+                                    earnedMarks: _correctAnswersCount,
+                                  );
+
+                              if (!mounted) return;
+
+                              if (result != null && result['success'] == true) {
+                                debugPrint(
+                                  "✅ Sync Successful. Navigating to results.",
+                                );
+                                await Future.delayed(
+                                  const Duration(milliseconds: 600),
+                                );
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => QuizResultPage(
+                                      totalQuestions: questions.length,
+                                      correctAnswers: _correctAnswersCount,
+                                    ),
+                                  ),
+                                );
+                              } else {
+                                debugPrint("❌ Sync Failed on UI Layer.");
+                                setState(() => _isSubmitting = false);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      "Server sync failed. Please check your connection.",
+                                    ),
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text(
+                            isLastQuestion ? "Finish Quiz" : "Next Question",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                        );
-                      }
-                    },
-                    child: Text(
-                      isLastQuestion ? "Finish Quiz" : "Next Question",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
                   ),
                 ),
               ],
@@ -179,44 +204,33 @@ class _QuizTakingPageState extends State<QuizTakingPage> {
     );
   }
 
-  // Instant Feedback UI
   Widget _buildOptions(QuizQuestion question) {
     return Column(
       children: question.options.map((option) {
         bool isSelected = _selectedOptionHash == option.text.hashCode;
-
-        // FEEDBACK LOGIC
         Color bgColor = Colors.white;
         Color borderColor = Colors.grey.shade300;
         IconData icon = Icons.radio_button_unchecked;
-        Color iconColor = Colors.grey;
 
         if (_selectedOptionHash != null) {
           if (option.isCorrect) {
-            // Always show correct answer in green
             bgColor = Colors.green.shade50;
             borderColor = Colors.green;
             icon = Icons.check_circle;
-            iconColor = Colors.green;
           } else if (isSelected) {
-            // Show wrong selection in red
             bgColor = Colors.red.shade50;
             borderColor = Colors.red;
             icon = Icons.cancel;
-            iconColor = Colors.red;
           }
         } else if (isSelected) {
           borderColor = const Color(0xFF6D391E);
           icon = Icons.radio_button_checked;
-          iconColor = const Color(0xFF6D391E);
         }
 
         return GestureDetector(
           onTap: () {
-            if (_selectedOptionHash != null) return; // Prevent changing answer
-            setState(() {
-              _selectedOptionHash = option.text.hashCode;
-            });
+            if (_selectedOptionHash != null) return;
+            setState(() => _selectedOptionHash = option.text.hashCode);
           },
           child: Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -228,18 +242,18 @@ class _QuizTakingPageState extends State<QuizTakingPage> {
             ),
             child: Row(
               children: [
-                Icon(icon, color: iconColor, size: 22),
+                Icon(
+                  icon,
+                  color: isSelected || option.isCorrect
+                      ? (option.isCorrect ? Colors.green : Colors.red)
+                      : Colors.grey,
+                  size: 22,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     option.text,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: isSelected || _selectedOptionHash != null
-                          ? Colors.black87
-                          : Colors.black54,
-                    ),
+                    style: const TextStyle(fontSize: 16),
                   ),
                 ),
               ],

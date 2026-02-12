@@ -12,10 +12,10 @@ class QuizResultPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Calculate Score
-    final int wrongAnswers = totalQuestions - correctAnswers;
-    final double percentage = (correctAnswers / totalQuestions) * 100;
-    final bool isPassed = percentage >= 70; // Standard passing grade
+    final double percentage = (totalQuestions > 0)
+        ? (correctAnswers / totalQuestions) * 100
+        : 0;
+    final bool isPassed = percentage >= 70;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -24,7 +24,7 @@ class QuizResultPage extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black,
-        automaticallyImplyLeading: false, // Hide back button
+        automaticallyImplyLeading: false,
       ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -32,8 +32,6 @@ class QuizResultPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             const SizedBox(height: 20),
-
-            // 🏆 CIRCULAR SCORE INDICATOR
             Stack(
               alignment: Alignment.center,
               children: [
@@ -48,6 +46,7 @@ class QuizResultPage extends StatelessWidget {
                   ),
                 ),
                 Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       "${percentage.toInt()}%",
@@ -68,23 +67,33 @@ class QuizResultPage extends StatelessWidget {
                 ),
               ],
             ),
-
             const SizedBox(height: 40),
-
-            // 📊 STATS GRID
             Row(
               children: [
                 _buildStatCard("Total", "$totalQuestions", Colors.blue),
                 const SizedBox(width: 16),
                 _buildStatCard("Correct", "$correctAnswers", Colors.green),
                 const SizedBox(width: 16),
-                _buildStatCard("Wrong", "$wrongAnswers", Colors.red),
+                _buildStatCard(
+                  "Wrong",
+                  "${totalQuestions - correctAnswers}",
+                  Colors.red,
+                ),
               ],
             ),
-
+            const SizedBox(height: 30),
+            Text(
+              isPassed
+                  ? "Excellent! You've unlocked the next lesson."
+                  : "You need 70% to pass and unlock the next content. Please try again.",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+                fontStyle: FontStyle.italic,
+              ),
+            ),
             const Spacer(),
-
-            // 🚪 BACK TO COURSE BUTTON
             SizedBox(
               width: double.infinity,
               height: 55,
@@ -95,10 +104,7 @@ class QuizResultPage extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                onPressed: () {
-                  // Pop until we get back to the Course/Home page
-                  Navigator.popUntil(context, (route) => route.isFirst);
-                },
+                onPressed: () => Navigator.of(context).pop(true),
                 child: const Text(
                   "Back to Course",
                   style: TextStyle(

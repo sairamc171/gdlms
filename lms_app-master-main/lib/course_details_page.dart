@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'services/api_service.dart';
 import 'lesson_player_page.dart';
-import 'quiz_intro_page.dart'; // Ensure this points to your new Quiz Intro file
+import 'quiz_intro_page.dart';
 
 class CourseDetailsPage extends StatefulWidget {
   final int courseId;
@@ -32,6 +32,9 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
 
   // Auto-refresh function to sync status from website
   Future<void> _refreshCurriculum() async {
+    debugPrint(
+      "🔄 [CourseDetails] Refreshing curriculum for Course ID: ${widget.courseId}",
+    );
     setState(() => _isLoading = _topics == null);
     try {
       final data = await apiService.getCourseCurriculum(widget.courseId);
@@ -40,11 +43,11 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
           _topics = data;
           _isLoading = false;
         });
+        debugPrint("✅ [CourseDetails] Curriculum data successfully fetched.");
       }
     } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      debugPrint("❌ [CourseDetails] Refresh Error: $e");
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -129,57 +132,82 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
             ),
             children: lessons.map((item) {
               bool isDone = _toBool(item['is_completed']);
+              bool isLocked = _toBool(item['is_locked']);
               String type = item['type'] ?? 'tutor_lesson';
               bool isQuiz = type == 'tutor_quiz';
 
               return ListTile(
+                enabled: !isLocked,
                 leading: Icon(
-                  isDone
-                      ? Icons.check_circle
-                      : (isQuiz
-                            ? Icons.help_outline
-                            : Icons.play_circle_outline),
-                  color: isDone ? Colors.green : primaryBrown,
+                  isLocked
+                      ? Icons.lock_outline
+                      : (isDone
+                            ? Icons.check_circle
+                            : (isQuiz
+                                  ? Icons.help_outline
+                                  : Icons.play_circle_outline)),
+                  color: isLocked
+                      ? Colors.grey
+                      : (isDone ? Colors.green : primaryBrown),
                 ),
                 title: Text(
                   item['title'],
-                  style: const TextStyle(color: Colors.black),
+                  style: TextStyle(
+                    color: isLocked ? Colors.grey : Colors.black,
+                  ),
                 ),
                 subtitle: isQuiz
                     ? const Text("Quiz", style: TextStyle(fontSize: 12))
                     : null,
-                onTap: () async {
-                  bool? needsRefresh;
+                trailing: isLocked
+                    ? const Icon(Icons.lock, size: 16, color: Colors.grey)
+                    : null,
+                onTap: isLocked
+                    ? null
+                    : () async {
+                        bool? needsRefresh;
+                        int itemId = int.parse(item['id'].toString());
 
-                  if (isQuiz) {
-                    // Navigate to the Quiz Intro Page for the 3-page flow
-                    needsRefresh = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (c) => QuizIntroPage(
-                          quizId: int.parse(item['id'].toString()),
-                          quizTitle: item['title'],
-                        ),
-                      ),
-                    );
-                  } else {
-                    // Standard navigation to the Lesson Player
-                    needsRefresh = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (c) => LessonPlayerPage(
-                          lessonId: int.parse(item['id'].toString()),
-                          allLessonIds: allItemIds,
-                        ),
-                      ),
-                    );
-                  }
+                        debugPrint(
+                          "🚀 [CourseDetails] Opening ${isQuiz ? 'Quiz' : 'Lesson'}: $itemId",
+                        );
 
-                  // If any page returned 'true' (meaning progress changed), refresh the UI
-                  if (needsRefresh == true) {
-                    _refreshCurriculum();
-                  }
-                },
+                        if (isQuiz) {
+                          // Navigates to Quiz Intro which handles attempt checks
+                          needsRefresh = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (c) => QuizIntroPage(
+                                quizId: itemId,
+                                quizTitle: item['title'],
+                              ),
+                            ),
+                          );
+                        } else {
+                          // Navigates to Lesson Player
+                          needsRefresh = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (c) => LessonPlayerPage(
+                                lessonId: itemId,
+                                allLessonIds: allItemIds,
+                              ),
+                            ),
+                          );
+                        }
+
+                        // FIXED LOGIC: Detect completion and force a curriculum refresh
+                        debugPrint(
+                          "🏁 [CourseDetails] Returned from item. Refresh signal: $needsRefresh",
+                        );
+
+                        if (needsRefresh == true || isDone == false) {
+                          debugPrint(
+                            "🔄 [CourseDetails] Triggering curriculum refresh to sync completion...",
+                          );
+                          _refreshCurriculum();
+                        }
+                      },
               );
             }).toList(),
           ),
