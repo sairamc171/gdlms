@@ -1,34 +1,263 @@
 import 'package:flutter/material.dart';
-import 'dashboard_page.dart';
-
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'services/api_service.dart';
+import 'models/user_profile.dart';
+import 'package:flutter/services.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
-
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
 
-
-class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderStateMixin {
+class _SettingsPageState extends State<SettingsPage>
+    with SingleTickerProviderStateMixin {
   final Color primaryBrown = const Color(0xFF6D391E);
   late TabController _tabController;
 
+  // Profile data
+  UserProfile? _profile;
+  bool _isLoadingProfile = true;
+  bool _isUploadingPhoto = false;
+  final ImagePicker _picker = ImagePicker();
+
+  // Controllers for Password Tab
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  bool _isResetting = false;
+
+  // Controllers for Profile Tab
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _jobTitleController = TextEditingController();
+  final _bioController = TextEditingController();
+  bool _isUpdatingProfile = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _loadProfile();
   }
-
 
   @override
   void dispose() {
     _tabController.dispose();
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _phoneController.dispose();
+    _jobTitleController.dispose();
+    _bioController.dispose();
     super.dispose();
   }
 
+  Future<void> _loadProfile() async {
+    setState(() => _isLoadingProfile = true);
+    final data = await apiService.getUserProfile();
+    if (data != null && mounted) {
+      setState(() {
+        _profile = UserProfile.fromJson(data);
+        _firstNameController.text = _profile!.user.firstName;
+        _lastNameController.text = _profile!.user.lastName;
+        _phoneController.text = _profile!.user.phone;
+        _jobTitleController.text = _profile!.user.jobTitle;
+        _bioController.text = _profile!.user.bio;
+        _isLoadingProfile = false;
+      });
+    } else {
+      setState(() => _isLoadingProfile = false);
+    }
+  }
+
+  Future<void> _handlePhotoUpload() async {
+    try {
+      // Check if image picker is available
+      final bool isAvailable = await _picker.supportsImageSource(
+        ImageSource.gallery,
+      );
+      if (!isAvailable) {
+        _showError('Image picker not available on this device');
+        return;
+      }
+
+      // Show options dialog
+      final ImageSource? source = await showDialog<ImageSource>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Choose Photo Source'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Camera'),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Gallery'),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (source == null) return;
+
+      // Pick image with error handling
+      final XFile? image = await _picker
+          .pickImage(
+            source: source,
+            maxWidth: 800,
+            maxHeight: 800,
+            imageQuality: 85,
+          )
+          .catchError((error) {
+            _showError('Failed to pick image: $error');
+            return null;
+          });
+
+      if (image == null) {
+        _showError('No image selected');
+        return;
+      }
+
+      setState(() => _isUploadingPhoto = true);
+
+      // Upload to server
+      final result = await apiService.uploadProfilePhoto(File(image.path));
+
+      if (!mounted) return;
+      setState(() => _isUploadingPhoto = false);
+
+      if (result != null && result['success'] == true) {
+        _showSuccess('Profile photo updated successfully!');
+        await _loadProfile();
+      } else {
+        _showError(result?['message'] ?? 'Failed to upload photo');
+      }
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      setState(() => _isUploadingPhoto = false);
+      _showError('Platform error: ${e.message}');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isUploadingPhoto = false);
+      _showError('Error: $e');
+    }
+  }
+
+  Future<void> _handlePasswordReset() async {
+    final String currentPass = _currentPasswordController.text;
+    final String newPass = _newPasswordController.text;
+    final String confirmPass = _confirmPasswordController.text;
+
+    if (currentPass.isEmpty || newPass.isEmpty || confirmPass.isEmpty) {
+      _showError("Please fill in all password fields");
+      return;
+    }
+
+    if (newPass.length < 8) {
+      _showError("Password must be at least 8 characters long");
+      return;
+    }
+
+    final hasNumber = RegExp(r'[0-9]').hasMatch(newPass);
+    final hasSpecial = RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(newPass);
+    if (!hasNumber || !hasSpecial) {
+      _showError(
+        "Password must include at least one number and one special character",
+      );
+      return;
+    }
+
+    if (currentPass == newPass) {
+      _showError("New password cannot be the same as your current password");
+      return;
+    }
+
+    if (newPass != confirmPass) {
+      _showError("New passwords do not match!");
+      return;
+    }
+
+    setState(() => _isResetting = true);
+
+    try {
+      final result = await apiService.resetPassword(currentPass, newPass);
+
+      if (!mounted) return;
+      setState(() => _isResetting = false);
+
+      if (result['success']) {
+        _showSuccess(result['message']);
+        _currentPasswordController.clear();
+        _newPasswordController.clear();
+        _confirmPasswordController.clear();
+      } else {
+        _showError(result['message'] ?? "Failed to reset password");
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isResetting = false);
+      _showError("An error occurred: $e");
+    }
+  }
+
+  Future<void> _handleProfileUpdate() async {
+    if (_firstNameController.text.isEmpty || _lastNameController.text.isEmpty) {
+      _showError("First name and last name are required");
+      return;
+    }
+
+    setState(() => _isUpdatingProfile = true);
+
+    final profileData = {
+      'first_name': _firstNameController.text,
+      'last_name': _lastNameController.text,
+      'phone': _phoneController.text,
+      'job_title': _jobTitleController.text,
+      'bio': _bioController.text,
+    };
+
+    try {
+      final success = await apiService.updateUserProfile(profileData);
+
+      if (!mounted) return;
+      setState(() => _isUpdatingProfile = false);
+
+      if (success) {
+        _showSuccess("Profile updated successfully!");
+        await _loadProfile();
+      } else {
+        _showError("Failed to update profile");
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isUpdatingProfile = false);
+      _showError("An error occurred: $e");
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
+  void _showSuccess(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.green),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,88 +272,98 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
         ),
         title: const Text(
           "Settings",
-          style: TextStyle(color: Colors.black, fontSize: 24, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
-      body: Column(
-        children: [
-          Container(
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: Colors.black12, width: 1)),
-            ),
-            child: TabBar(
-              controller: _tabController,
-              indicatorColor: primaryBrown,
-              labelColor: primaryBrown,
-              unselectedLabelColor: Colors.black54,
-              tabs: const [
-                Tab(text: "Profile"),
-                Tab(text: "Password"),
-              ],
-            ),
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
+      body: _isLoadingProfile
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF6D391E)),
+            )
+          : Column(
               children: [
-                _buildProfileTab(),   // Index 0
-                _buildPasswordTab(),  // Index 1
+                Container(
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: Colors.black12, width: 1),
+                    ),
+                  ),
+                  child: TabBar(
+                    controller: _tabController,
+                    indicatorColor: primaryBrown,
+                    labelColor: primaryBrown,
+                    unselectedLabelColor: Colors.black54,
+                    tabs: const [
+                      Tab(text: "Profile"),
+                      Tab(text: "Password"),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [_buildProfileTab(), _buildPasswordTab()],
+                  ),
+                ),
               ],
             ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        selectedItemColor: primaryBrown,
-        unselectedItemColor: Colors.grey,
-        currentIndex: 2,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.speed), label: "Dashboard"),
-          BottomNavigationBarItem(icon: Icon(Icons.extension), label: "Quiz Attempts"),
-          BottomNavigationBarItem(icon: Icon(Icons.menu), label: "Menu"),
-        ],
-        onTap: (index) {
-          if (index == 0) {
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (context) => const DashboardPage()),
-                  (route) => false,
-            );
-          } else {
-            Navigator.pop(context);
-          }
-        },
-      ),
     );
   }
 
-
-  // --- PASSWORD TAB BUILDER ---
   Widget _buildPasswordTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildInputField("Current Password", "Current Password", isPassword: true),
-          _buildInputField("New Password", "Type Password", isPassword: true),
-          _buildInputField("Re-type New Password", "Type Password", isPassword: true),
+          _buildInputField(
+            "Current Password",
+            "Current Password",
+            isPassword: true,
+            controller: _currentPasswordController,
+          ),
+          _buildInputField(
+            "New Password",
+            "Type Password",
+            isPassword: true,
+            controller: _newPasswordController,
+          ),
+          _buildInputField(
+            "Re-type New Password",
+            "Type Password",
+            isPassword: true,
+            controller: _confirmPasswordController,
+          ),
           const SizedBox(height: 24),
           Center(
             child: SizedBox(
               width: 180,
               height: 50,
               child: ElevatedButton(
-                onPressed: () {},
+                onPressed: _isResetting ? null : _handlePasswordReset,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryBrown,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
-                child: const Text(
-                  "Reset Password",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white, fontSize: 16),
-                ),
+                child: _isResetting
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text(
+                        "Reset Password",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
               ),
             ),
           ),
@@ -133,115 +372,155 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     );
   }
 
-
-  // --- PROFILE TAB BUILDER ---
   Widget _buildProfileTab() {
+    if (_profile == null) {
+      return const Center(child: Text('Failed to load profile'));
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- PROFILE & COVER PHOTO SECTION ---
-          Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.center,
-            children: [
-              // Cover Photo Container
-              GestureDetector(
-                onTap: () => debugPrint("Update Cover Photo"),
-                child: Container(
-                  height: 150,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(12),
-                    image: const DecorationImage(
-                      image: NetworkImage('https://via.placeholder.com/600x200'), // Replace with actual logic
-                      fit: BoxFit.cover,
+          // Profile Photo Section
+          Center(
+            child: Stack(
+              children: [
+                CircleAvatar(
+                  radius: 60,
+                  backgroundColor: primaryBrown.withOpacity(0.1),
+                  child: CircleAvatar(
+                    radius: 55,
+                    backgroundColor: primaryBrown,
+                    backgroundImage: _profile!.user.profilePhoto.isNotEmpty
+                        ? NetworkImage(_profile!.user.profilePhoto)
+                        : null,
+                    child: _profile!.user.profilePhoto.isEmpty
+                        ? Text(
+                            _profile!.user.firstName.isNotEmpty
+                                ? _profile!.user.firstName[0].toUpperCase()
+                                : 'U',
+                            style: const TextStyle(
+                              fontSize: 48,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          )
+                        : null,
+                  ),
+                ),
+                if (_isUploadingPhoto)
+                  Positioned.fill(
+                    child: CircleAvatar(
+                      radius: 60,
+                      backgroundColor: Colors.black.withOpacity(0.5),
+                      child: const CircularProgressIndicator(
+                        color: Colors.white,
+                      ),
                     ),
                   ),
-                  child: const Align(
-                    alignment: Alignment.bottomRight,
-                    child: Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: CircleAvatar(
-                        backgroundColor: Colors.white,
-                        radius: 18,
-                        child: Icon(Icons.camera_alt, size: 18, color: Colors.black),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: GestureDetector(
+                    onTap: _isUploadingPhoto ? null : _handlePhotoUpload,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: primaryBrown,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                      child: const Icon(
+                        Icons.camera_alt,
+                        size: 20,
+                        color: Colors.white,
                       ),
                     ),
                   ),
                 ),
-              ),
-              // Profile Photo
-              Positioned(
-                bottom: -50,
-                child: GestureDetector(
-                  onTap: () => print("Update Profile Photo"),
-                  child: Stack(
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 4),
-                        ),
-                        child: CircleAvatar(
-                          radius: 50,
-                          backgroundColor: Colors.grey[400],
-                          backgroundImage: const NetworkImage('https://via.placeholder.com/150'), // Replace with actual logic
-                        ),
-                      ),
-                      const Positioned(
-                        bottom: 5,
-                        right: 5,
-                        child: CircleAvatar(
-                          backgroundColor: Colors.white,
-                          radius: 15,
-                          child: Icon(Icons.camera_alt, size: 15, color: Colors.black),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 60), // Space for the floating profile image
-
-
-          const Text("Profile Photo Size: 200x200 pixels", style: TextStyle(fontSize: 12, color: Colors.grey)),
-          const Text("Cover Photo Size: 700x430 pixels", style: TextStyle(fontSize: 12, color: Colors.grey)),
+          const SizedBox(height: 10),
+          const Center(
+            child: Text(
+              'Tap camera icon to upload photo',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ),
           const SizedBox(height: 30),
 
-
-          _buildInputField("First Name", "Monish"),
-          _buildInputField("Last Name", "M"),
-          _buildInputField("User Name", "monish.m@chakraview.co", isReadOnly: true),
-          _buildInputField("Phone Number", "Phone Number"),
-          _buildInputField("Skill/Occupation", "Student"),
-          const Text("Timezone", style: TextStyle(fontWeight: FontWeight.bold)),
+          // Editable Fields
+          _buildInputField(
+            "First Name",
+            "First Name",
+            controller: _firstNameController,
+          ),
+          _buildInputField(
+            "Last Name",
+            "Last Name",
+            controller: _lastNameController,
+          ),
+          _buildInputField(
+            "User Name",
+            _profile!.user.username,
+            isReadOnly: true,
+          ),
+          _buildInputField("Email", _profile!.user.email, isReadOnly: true),
+          _buildInputField(
+            "Phone Number",
+            "Phone Number",
+            controller: _phoneController,
+          ),
+          _buildInputField(
+            "Skill/Occupation",
+            "Skill/Occupation",
+            controller: _jobTitleController,
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            "Bio",
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
           const SizedBox(height: 8),
-          _buildDropdownField("Abidjan"),
-          const SizedBox(height: 24),
-          const Text("Bio", style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          _buildBioEditor(),
-          const SizedBox(height: 24),
-          const Text("Display name publicly as", style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          _buildDropdownField("Monish M"),
+          TextField(
+            controller: _bioController,
+            maxLines: 5,
+            decoration: InputDecoration(
+              hintText: "Write your bio here...",
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              contentPadding: const EdgeInsets.all(12),
+            ),
+          ),
           const SizedBox(height: 32),
           Center(
             child: SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                onPressed: () {},
+                onPressed: _isUpdatingProfile ? null : _handleProfileUpdate,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryBrown,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
-                child: const Text("Update Profile", style: TextStyle(color: Colors.white)),
+                child: _isUpdatingProfile
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text(
+                        "Update Profile",
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
               ),
             ),
           ),
@@ -251,81 +530,38 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     );
   }
 
-
-  // --- REUSABLE FIELD WIDGETS ---
-  Widget _buildInputField(String label, String hint, {bool isReadOnly = false, bool isPassword = false}) {
+  Widget _buildInputField(
+    String label,
+    String hint, {
+    bool isReadOnly = false,
+    bool isPassword = false,
+    TextEditingController? controller,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
           const SizedBox(height: 8),
           TextField(
+            controller: controller,
             readOnly: isReadOnly,
             obscureText: isPassword,
             decoration: InputDecoration(
               filled: isReadOnly,
               fillColor: isReadOnly ? Colors.grey[200] : Colors.transparent,
               hintText: hint,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-
-  Widget _buildDropdownField(String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.black38),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          isExpanded: true,
-          value: value,
-          items: [DropdownMenuItem(value: value, child: Text(value))],
-          onChanged: (v) {},
-        ),
-      ),
-    );
-  }
-
-
-  Widget _buildBioEditor() {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.black38),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Container(
-            color: Colors.grey[100],
-            padding: const EdgeInsets.all(8),
-            child: const Row(
-              children: [
-                Icon(Icons.format_bold, size: 20), SizedBox(width: 15),
-                Icon(Icons.format_italic, size: 20), SizedBox(width: 15),
-                Icon(Icons.format_underlined, size: 20), SizedBox(width: 15),
-                Icon(Icons.format_quote, size: 20), SizedBox(width: 15),
-                Icon(Icons.format_list_bulleted, size: 20), SizedBox(width: 15),
-                Icon(Icons.format_list_numbered, size: 20), SizedBox(width: 15),
-                Icon(Icons.format_align_left, size: 20),
-              ],
-            ),
-          ),
-          const TextField(
-            maxLines: 5,
-            decoration: InputDecoration(
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.all(10),
-              hintText: "Write your bio here...",
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 16,
+              ),
             ),
           ),
         ],
@@ -333,4 +569,3 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     );
   }
 }
-

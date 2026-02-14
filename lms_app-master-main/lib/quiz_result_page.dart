@@ -104,6 +104,7 @@ class QuizResultPage extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
+                // Returns true to signal the previous page to refresh
                 onPressed: () => Navigator.of(context).pop(true),
                 child: const Text(
                   "Back to Course",

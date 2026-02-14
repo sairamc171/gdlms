@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'services/api_service.dart';
 import 'lesson_player_page.dart';
-import 'quiz_intro_page.dart';
+import 'quiz_intro_page.dart'; // Ensure this points to your new Quiz Intro file
 
 class CourseDetailsPage extends StatefulWidget {
   final int courseId;
@@ -97,9 +97,7 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
     if (_topics == null) return const SizedBox();
 
     List<dynamic> allItems = [];
-    for (var topic in _topics!) {
-      allItems.addAll(topic['items'] ?? []);
-    }
+    for (var topic in _topics!) allItems.addAll(topic['items'] ?? []);
     List<int> allItemIds = allItems
         .map((item) => int.parse(item['id'].toString()))
         .toList();
@@ -173,7 +171,6 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
                         );
 
                         if (isQuiz) {
-                          // Navigates to Quiz Intro which handles attempt checks
                           needsRefresh = await Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -184,7 +181,6 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
                             ),
                           );
                         } else {
-                          // Navigates to Lesson Player
                           needsRefresh = await Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -196,14 +192,14 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
                           );
                         }
 
-                        // FIXED LOGIC: Detect completion and force a curriculum refresh
+                        // Detailed Logging for Refresh Logic
                         debugPrint(
-                          "🏁 [CourseDetails] Returned from item. Refresh signal: $needsRefresh",
+                          "🏁 [CourseDetails] Returned from item. Refresh needed? $needsRefresh",
                         );
 
                         if (needsRefresh == true || isDone == false) {
                           debugPrint(
-                            "🔄 [CourseDetails] Triggering curriculum refresh to sync completion...",
+                            "🔄 [CourseDetails] Progress update detected. Refreshing curriculum list...",
                           );
                           _refreshCurriculum();
                         }

@@ -3,10 +3,18 @@ import 'dashboard_page.dart';
 import 'services/api_service.dart';
 import 'forgot_password_page.dart';
 
-void main() => runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize API service and load saved token
+  await ApiService.init();
+
+  runApp(const MyApp());
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -15,13 +23,15 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
         colorSchemeSeed: const Color(0xFF6D391E),
       ),
-      home: const LoginPage(),
+      // Auto-login: If token exists, go to Dashboard, else Login
+      home: apiService.isLoggedIn ? const DashboardPage() : const LoginPage(),
     );
   }
 }
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
+
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
@@ -30,11 +40,19 @@ class _LoginPageState extends State<LoginPage> {
   final _userController = TextEditingController();
   final _passController = TextEditingController();
   bool _isLoading = false;
+  bool _keepSignedIn = false;
+
+  @override
+  void dispose() {
+    _userController.dispose();
+    _passController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F3E7), // Design cream background
+      backgroundColor: const Color(0xFFF9F3E7),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -73,6 +91,7 @@ class _LoginPageState extends State<LoginPage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
+                  onSubmitted: (_) => _handleLogin(),
                 ),
                 const SizedBox(height: 16),
                 Row(
@@ -80,14 +99,18 @@ class _LoginPageState extends State<LoginPage> {
                   children: [
                     Row(
                       children: [
-                        Checkbox(value: false, onChanged: (v) {}),
+                        Checkbox(
+                          value: _keepSignedIn,
+                          onChanged: (v) {
+                            setState(() => _keepSignedIn = v ?? false);
+                          },
+                        ),
                         const Text(
                           "Keep me signed in",
                           style: TextStyle(fontSize: 12),
                         ),
                       ],
                     ),
-                    // FIXED: Removed the invalid Text() wrapper around GestureDetector
                     GestureDetector(
                       onTap: () {
                         Navigator.push(
@@ -137,11 +160,21 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _handleLogin() async {
+    if (_userController.text.trim().isEmpty ||
+        _passController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter username and password")),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
+
     bool success = await apiService.login(
-      _userController.text,
-      _passController.text,
+      _userController.text.trim(),
+      _passController.text.trim(),
     );
+
     if (mounted) {
       if (success) {
         Navigator.pushReplacement(
@@ -150,9 +183,12 @@ class _LoginPageState extends State<LoginPage> {
         );
       } else {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Invalid Credentials")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Invalid Credentials"),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }

@@ -72,13 +72,6 @@ class _QuizTakingPageState extends State<QuizTakingPage> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const Text(
-                      "Instant Feedback",
-                      style: TextStyle(
-                        color: Color(0xFF6D391E),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -135,10 +128,6 @@ class _QuizTakingPageState extends State<QuizTakingPage> {
                             } else {
                               setState(() => _isSubmitting = true);
 
-                              debugPrint(
-                                "🛠 Attempting to sync Quiz ID: ${widget.quizId} with Score: $_correctAnswersCount",
-                              );
-
                               final result = await apiService
                                   .syncLessonWithWebsite(
                                     widget.quizId,
@@ -149,23 +138,26 @@ class _QuizTakingPageState extends State<QuizTakingPage> {
                               if (!mounted) return;
 
                               if (result != null && result['success'] == true) {
-                                debugPrint(
-                                  "✅ Sync Successful. Navigating to results.",
-                                );
-                                await Future.delayed(
-                                  const Duration(milliseconds: 600),
-                                );
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => QuizResultPage(
-                                      totalQuestions: questions.length,
-                                      correctAnswers: _correctAnswersCount,
-                                    ),
-                                  ),
-                                );
+                                // Wait for result from Result Page
+                                final bool? refreshNeeded =
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => QuizResultPage(
+                                          totalQuestions: questions.length,
+                                          correctAnswers: _correctAnswersCount,
+                                        ),
+                                      ),
+                                    );
+
+                                // If ResultPage returned true, pop this page with true
+                                if (mounted) {
+                                  Navigator.pop(
+                                    context,
+                                    refreshNeeded ?? false,
+                                  );
+                                }
                               } else {
-                                debugPrint("❌ Sync Failed on UI Layer.");
                                 setState(() => _isSubmitting = false);
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
