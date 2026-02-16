@@ -176,12 +176,17 @@ class ApiService {
 
   Future<bool> requestPasswordReset(String email) async {
     try {
+      // Changed endpoint to /request-reset and used customNamespace
       final response = await _dio.post(
-        '/gd-college/v1/reset-password',
+        '/$customNamespace/request-reset',
         data: {'email': email},
-        options: Options(contentType: Headers.formUrlEncodedContentType),
       );
-      return response.statusCode == 200;
+
+      // If the API returns success: true, we return true to the UI
+      if (response.statusCode == 200 && response.data != null) {
+        return response.data['success'] == true;
+      }
+      return false;
     } on DioException catch (e) {
       debugPrint("Password Reset Error: ${e.message}");
       return false;
@@ -190,7 +195,6 @@ class ApiService {
       return false;
     }
   }
-
   /* =====================================================
    * 4. CURRICULUM & SYNC (Unified Logic)
    * ===================================================== */
