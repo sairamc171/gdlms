@@ -400,7 +400,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
                       child: Icon(Icons.lock, size: 18),
                     ),
                   Text(
-                    isLocked ? "Watch Video to Unlock" : "Mark as Complete",
+                    isLocked ? "Mark as Complete" : "Mark as Complete",
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
