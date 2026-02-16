@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'services/api_service.dart';
 import 'lesson_player_page.dart';
-import 'quiz_intro_page.dart'; // Ensure this points to your new Quiz Intro file
+import 'quiz_intro_page.dart'; // Added for smart routing consistency
 
 class CourseDetailsPage extends StatefulWidget {
   final int courseId;
@@ -22,6 +22,7 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
   final Color headerFillColor = const Color(0xFFF3F4F9);
 
   List<dynamic>? _topics;
+  Map<String, dynamic>? _ratingData;
   bool _isLoading = true;
 
   @override
@@ -30,28 +31,30 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
     _refreshCurriculum();
   }
 
-  // Auto-refresh function to sync status from website
   Future<void> _refreshCurriculum() async {
-    debugPrint(
-      "🔄 [CourseDetails] Refreshing curriculum for Course ID: ${widget.courseId}",
-    );
     setState(() => _isLoading = _topics == null);
     try {
-      final data = await apiService.getCourseCurriculum(widget.courseId);
+      final results = await Future.wait([
+        apiService.getCourseCurriculum(widget.courseId),
+        apiService.getCourseRatings(widget.courseId),
+      ]);
+
       if (mounted) {
         setState(() {
-          _topics = data;
+          _topics = results[0] as List<dynamic>?;
+          _ratingData = results[1] as Map<String, dynamic>?;
           _isLoading = false;
         });
-        debugPrint("✅ [CourseDetails] Curriculum data successfully fetched.");
       }
     } catch (e) {
-      debugPrint("❌ [CourseDetails] Refresh Error: $e");
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   bool _toBool(dynamic value) {
+    if (value == null) return false;
     return value == true ||
         value == "1" ||
         value == 1 ||
@@ -85,6 +88,14 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
                     _buildThumbnail(),
                     _buildCurriculumHeader(),
                     _buildCurriculumList(),
+                    const Divider(
+                      height: 40,
+                      thickness: 1,
+                      indent: 20,
+                      endIndent: 20,
+                    ),
+                    if (_ratingData != null && _ratingData!['reviews'] != null)
+                      _buildReviewList(_ratingData!['reviews']),
                     const SizedBox(height: 50),
                   ],
                 ),
@@ -97,7 +108,9 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
     if (_topics == null) return const SizedBox();
 
     List<dynamic> allItems = [];
-    for (var topic in _topics!) allItems.addAll(topic['items'] ?? []);
+    for (var topic in _topics!) {
+      allItems.addAll(topic['items'] ?? []);
+    }
     List<int> allItemIds = allItems
         .map((item) => int.parse(item['id'].toString()))
         .toList();
@@ -130,15 +143,17 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
             ),
             children: lessons.map((item) {
               bool isDone = _toBool(item['is_completed']);
-              bool isLocked = _toBool(item['is_locked']);
+              bool isLocked = _toBool(
+                item['is_locked'],
+              ); // STRICT SEQUENTIAL CHECK
               String type = item['type'] ?? 'tutor_lesson';
               bool isQuiz = type == 'tutor_quiz';
 
               return ListTile(
-                enabled: !isLocked,
+                // Sequential Logic: Show lock if locked, checkmark if done, play if available
                 leading: Icon(
                   isLocked
-                      ? Icons.lock_outline
+                      ? Icons.lock
                       : (isDone
                             ? Icons.check_circle
                             : (isQuiz
@@ -152,30 +167,32 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
                   item['title'],
                   style: TextStyle(
                     color: isLocked ? Colors.grey : Colors.black,
+                    fontWeight: isLocked ? FontWeight.normal : FontWeight.w500,
                   ),
                 ),
                 subtitle: isQuiz
-                    ? const Text("Quiz", style: TextStyle(fontSize: 12))
-                    : null,
-                trailing: isLocked
-                    ? const Icon(Icons.lock, size: 16, color: Colors.grey)
+                    ? const Text("Quiz", style: TextStyle(fontSize: 11))
                     : null,
                 onTap: isLocked
-                    ? null
+                    ? () {
+                        // Visual feedback if user taps a locked item
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              "Complete previous lessons to unlock this content.",
+                            ),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
                     : () async {
                         bool? needsRefresh;
-                        int itemId = int.parse(item['id'].toString());
-
-                        debugPrint(
-                          "🚀 [CourseDetails] Opening ${isQuiz ? 'Quiz' : 'Lesson'}: $itemId",
-                        );
-
                         if (isQuiz) {
                           needsRefresh = await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (c) => QuizIntroPage(
-                                quizId: itemId,
+                                quizId: int.parse(item['id'].toString()),
                                 quizTitle: item['title'],
                               ),
                             ),
@@ -185,22 +202,14 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
                             context,
                             MaterialPageRoute(
                               builder: (c) => LessonPlayerPage(
-                                lessonId: itemId,
+                                lessonId: int.parse(item['id'].toString()),
                                 allLessonIds: allItemIds,
                               ),
                             ),
                           );
                         }
 
-                        // Detailed Logging for Refresh Logic
-                        debugPrint(
-                          "🏁 [CourseDetails] Returned from item. Refresh needed? $needsRefresh",
-                        );
-
-                        if (needsRefresh == true || isDone == false) {
-                          debugPrint(
-                            "🔄 [CourseDetails] Progress update detected. Refreshing curriculum list...",
-                          );
+                        if (needsRefresh == true) {
                           _refreshCurriculum();
                         }
                       },
@@ -209,6 +218,73 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
           ),
         );
       },
+    );
+  }
+
+  // --- EXISTING UI HELPER METHODS ---
+
+  Widget _buildReviewList(List<dynamic> reviews) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: Text(
+            "Reviews",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+        ),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: reviews.length,
+          itemBuilder: (context, index) {
+            final review = reviews[index];
+            return ListTile(
+              leading: CircleAvatar(
+                backgroundColor: primaryBrown.withOpacity(0.1),
+                child: Icon(Icons.person, color: primaryBrown),
+              ),
+              title: Text(
+                review['display_name'] ?? review['comment_author'] ?? "Student",
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 4),
+                  _buildStarRating(
+                    double.tryParse(review['rating'].toString()) ?? 0.0,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    review['comment_content'] ?? "",
+                    style: const TextStyle(color: Colors.black87),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    review['comment_date'] ?? "",
+                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStarRating(double rating) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (index) {
+        return Icon(
+          index < rating.floor() ? Icons.star : Icons.star_border,
+          color: Colors.orange,
+          size: 16,
+        );
+      }),
     );
   }
 

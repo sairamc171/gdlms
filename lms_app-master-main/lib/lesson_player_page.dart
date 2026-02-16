@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'services/api_service.dart';
-import 'quiz_page.dart';
+import 'quiz_intro_page.dart';
+import 'quiz_result_page.dart';
 import 'dart:async';
 
 class LessonPlayerPage extends StatefulWidget {
@@ -42,38 +43,44 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
   }
 
   bool _toBool(dynamic value) {
-    // If value is null or false, it's not completed
-    if (value == null || value == false || value == 0 || value == "0") {
+    if (value == null || value == false || value == 0 || value == "0")
       return false;
-    }
-
-    // If it's true or "1" or 1, it's completed
     if (value == true ||
         value == "1" ||
         value == 1 ||
-        value.toString().toLowerCase() == "true") {
+        value.toString().toLowerCase() == "true")
       return true;
-    }
-
-    // If it's a number greater than 1, it's likely a timestamp (completed)
-    if (value is int && value > 1) {
-      return true;
-    }
-
-    // If it's a string that can be parsed as a number > 1, it's a timestamp
+    if (value is int && value > 1) return true;
     if (value is String) {
       final parsed = int.tryParse(value);
-      if (parsed != null && parsed > 1) {
-        return true;
-      }
+      if (parsed != null && parsed > 1) return true;
     }
-
     return false;
   }
 
   bool _hasVideo() {
     final videoId = _lessonData?['video_id']?.toString() ?? '';
     return videoId.isNotEmpty;
+  }
+
+  // Helper to safely parse integers for quiz results
+  int _parseInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  // Helper to check if quiz is completed and get result data
+  Future<Map<String, dynamic>?> _checkQuizCompletion(int quizId) async {
+    try {
+      final attempts = await apiService.getQuizAttempts(quizId);
+      if (attempts.isNotEmpty) return attempts.first;
+    } catch (e) {
+      debugPrint('Error checking quiz completion: $e');
+    }
+    return null;
   }
 
   Future<void> _fetchStatusFromWebsite() async {
@@ -86,6 +93,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
         _lessonData = data;
         _isLessonCompleted = isCompleted;
 
+        // SEQUENTIAL LOGIC: If no video is present, enable button immediately
         if (hasNoVideo && !isCompleted) {
           _isButtonEnabled = true;
         }
@@ -131,14 +139,40 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
     if (!mounted || nextData == null) return;
 
     if (nextData['type'] == 'quiz') {
+      final quizId = nextData['id'];
+      final quizTitle = nextData['title'];
+
+      // --- SMART ROUTING LOGIC ---
+      bool alreadyDone = _toBool(nextData['is_completed']);
+
+      if (alreadyDone) {
+        debugPrint('✓ Quiz already done. Routing to Results Page.');
+        final attempt = await _checkQuizCompletion(quizId);
+
+        if (attempt != null) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (c) => QuizResultPage(
+                totalQuestions: _parseInt(attempt['total_questions']),
+                correctAnswers: _parseInt(attempt['total_correct']),
+              ),
+            ),
+          );
+          return;
+        }
+      }
+
+      // Default to Intro Page if not done or data fetch failed
+      debugPrint('○ Routing to Quiz Intro.');
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (c) =>
-              QuizPage(quizId: nextData['id'], title: nextData['title']),
+          builder: (c) => QuizIntroPage(quizId: quizId, quizTitle: quizTitle),
         ),
       );
     } else {
+      // Standard Lesson Navigation
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -247,7 +281,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
   </script>
 </body>
 </html>
-    ''';
+''';
 
     return AspectRatio(
       aspectRatio: 16 / 9,
@@ -261,7 +295,6 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
           allowsInlineMediaPlayback: true,
           mediaPlaybackRequiresUserGesture: false,
           domStorageEnabled: true,
-          allowUniversalAccessFromFileURLs: true,
         ),
         onWebViewCreated: (controller) {
           _webViewController = controller;
@@ -276,6 +309,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
                 if (mounted) {
                   setState(() {
                     _videoProgress = progress;
+                    // --- SEQUENTIAL LOGIC: Unlock at 90% ---
                     if (progress >= 0.90 && !_isButtonEnabled) {
                       _isButtonEnabled = true;
                     }
@@ -285,20 +319,11 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
             },
           );
         },
-        onLoadStart: (controller, url) async {
-          await controller.setSettings(
-            settings: InAppWebViewSettings(
-              userAgent:
-                  "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Mobile Safari/537.36",
-            ),
-          );
-        },
       ),
     );
   }
 
   Widget _buildSyncButton() {
-    // For completed lessons: show green completed button (disabled)
     if (_isLessonCompleted) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
@@ -312,7 +337,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
               148,
               148,
               148,
-            ).withValues(alpha: 0.7),
+            ).withOpacity(0.7),
             minimumSize: const Size(double.infinity, 54),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -336,10 +361,8 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
       );
     }
 
-    // For incomplete lessons
     bool hasVideo = _hasVideo();
     bool isLocked = hasVideo && !_isButtonEnabled;
-    String buttonText = "Mark as Complete";
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
@@ -352,7 +375,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
           foregroundColor: Colors.white,
           disabledBackgroundColor: isLocked
               ? Colors.grey[400]
-              : primaryBrown.withValues(alpha: 0.7),
+              : primaryBrown.withOpacity(0.7),
           minimumSize: const Size(double.infinity, 54),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -377,7 +400,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
                       child: Icon(Icons.lock, size: 18),
                     ),
                   Text(
-                    buttonText,
+                    isLocked ? "Watch Video to Unlock" : "Mark as Complete",
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,

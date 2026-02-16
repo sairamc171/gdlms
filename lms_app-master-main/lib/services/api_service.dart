@@ -239,26 +239,18 @@ class ApiService {
       'earned_marks': earnedMarks,
     };
 
-    debugPrint(
-      "📡 API SYNC START - Type: $itemType, ID: $itemId, Marks: $earnedMarks",
-    );
-
     try {
       final response = await _dio.post(
         '/$customNamespace/sync-lesson-status',
         data: payload,
       );
 
-      debugPrint("📥 API SYNC RESPONSE: ${response.data}");
-
       if (response.statusCode == 200 && response.data != null) {
         return response.data;
       }
     } on DioException catch (e) {
-      debugPrint("🧨 API CRASH - Error: ${e.message}");
+      debugPrint("API CRASH - Error: ${e.message}");
       debugPrint("Response: ${e.response?.data}");
-    } catch (e) {
-      debugPrint("🧨 API CRASH - Error: $e");
     }
     return null;
   }
@@ -291,9 +283,53 @@ class ApiService {
         return response.data['attempts'] ?? [];
       }
     } on DioException catch (e) {
-      debugPrint("Quiz Attempts Error: ${e.message}");
+      debugPrint("Quiz Attempts Error (Specific): ${e.message}");
+
+      // IF SERVER CRASHES (500), TRY FALLBACK
+      if (e.response?.statusCode == 500) {
+        debugPrint(
+          "⚠️ Specific endpoint failed. Attempting local filter fallback...",
+        );
+        return await _getQuizAttemptsFallback(quizId);
+      }
     } catch (e) {
       debugPrint("Quiz Attempts Error: $e");
+    }
+    return [];
+  }
+
+  /// Helper to filter from the "All Attempts" endpoint if the specific one fails
+  Future<List<dynamic>> _getQuizAttemptsFallback(int quizId) async {
+    try {
+      final allAttempts = await getAllUserQuizAttempts();
+      // Filter attempts where the quiz ID matches (ensure type matching)
+      final filtered = allAttempts.where((attempt) {
+        final id =
+            attempt['quiz_id'] ?? attempt['item_id']; // Handle varying keys
+        return id.toString() == quizId.toString();
+      }).toList();
+
+      debugPrint("Fallback found ${filtered.length} attempts for Quiz $quizId");
+      return filtered;
+    } catch (e) {
+      debugPrint("Fallback failed: $e");
+      return [];
+    }
+  }
+
+  /// Get all quiz attempts for the current user across all quizzes
+  Future<List<Map<String, dynamic>>> getAllUserQuizAttempts() async {
+    try {
+      final response = await _dio.get('/$customNamespace/all-quiz-attempts');
+
+      if (response.statusCode == 200 && response.data != null) {
+        final List attempts = response.data['attempts'] ?? [];
+        return attempts.map((e) => e as Map<String, dynamic>).toList();
+      }
+    } on DioException catch (e) {
+      debugPrint("All Quiz Attempts Error: ${e.message}");
+    } catch (e) {
+      debugPrint("All Quiz Attempts Error: $e");
     }
     return [];
   }
@@ -349,7 +385,7 @@ class ApiService {
         data: profileData,
       );
 
-      debugPrint("📥 Profile update response: ${response.data}");
+      debugPrint("Profile update response: ${response.data}");
 
       return response.statusCode == 200;
     } on DioException catch (e) {
@@ -441,6 +477,46 @@ class ApiService {
     } catch (e) {
       debugPrint("Profile Photo Upload Error: $e");
       return {'success': false, 'message': 'Upload failed: $e'};
+    }
+  }
+
+  /* =====================================================
+   * 8. COURSE REVIEWS & RATINGS
+   * ===================================================== */
+
+  Future<Map<String, dynamic>?> getCourseRatings(int courseId) async {
+    try {
+      final response = await _dio.get(
+        '/$customNamespace/course-ratings/$courseId',
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        return response.data;
+      }
+    } on DioException catch (e) {
+      debugPrint("Course Ratings Error: ${e.message}");
+    } catch (e) {
+      debugPrint("Course Ratings Error: $e");
+    }
+    return null;
+  }
+
+  Future<bool> submitReview(int courseId, double rating, String comment) async {
+    try {
+      final response = await _dio.post(
+        '/$customNamespace/submit-review',
+        data: {'course_id': courseId, 'rating': rating, 'comment': comment},
+      );
+
+      return response.statusCode == 200 &&
+          response.data != null &&
+          response.data['success'] == true;
+    } on DioException catch (e) {
+      debugPrint("Submit Review Error: ${e.message}");
+      return false;
+    } catch (e) {
+      debugPrint("Submit Review Error: $e");
+      return false;
     }
   }
 }

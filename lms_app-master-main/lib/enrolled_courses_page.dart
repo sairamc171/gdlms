@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'services/api_service.dart';
 import 'course_details_page.dart';
+import 'course_reviews_page.dart';
 
 class EnrolledCoursesPage extends StatefulWidget {
   const EnrolledCoursesPage({super.key});
@@ -75,7 +76,6 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
               );
             }
 
-            // FILTERING LOGIC
             final inProgress = allCourses
                 .where(
                   (c) =>
@@ -123,6 +123,10 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
   Widget _buildCourseCard(dynamic course, {bool isCompleted = false}) {
     final double progress =
         double.tryParse(course['progress'].toString()) ?? 0.0;
+    final double rating =
+        double.tryParse(course['rating_avg']?.toString() ?? '0') ?? 0.0;
+    final int reviewCount =
+        int.tryParse(course['rating_count']?.toString() ?? '0') ?? 0;
 
     return GestureDetector(
       onTap: () async {
@@ -144,12 +148,12 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isCompleted
-                ? Colors.green.withOpacity(0.3)
-                : primaryBrown.withOpacity(0.2),
+                ? Colors.green.withValues(alpha: 0.3)
+                : primaryBrown.withValues(alpha: 0.2),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -213,7 +217,7 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
               ],
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
               child: Text(
                 course['title'],
                 style: const TextStyle(
@@ -223,8 +227,47 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
                 ),
               ),
             ),
+
+            // Star Rating with Navigation to Reviews
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (c) => CourseReviewsPage(
+                        courseId: course['id'],
+                        courseTitle: course['title'],
+                      ),
+                    ),
+                  );
+                },
+                child: Row(
+                  children: [
+                    ...List.generate(5, (index) {
+                      return Icon(
+                        index < rating.floor() ? Icons.star : Icons.star_border,
+                        color: rating > 0 ? Colors.orange : Colors.grey[300],
+                        size: 16,
+                      );
+                    }),
+                    const SizedBox(width: 8),
+                    Text(
+                      "${rating.toStringAsFixed(1)} ($reviewCount Reviews)",
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
               child: Row(
                 children: [
                   Expanded(

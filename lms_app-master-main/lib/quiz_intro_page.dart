@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'quiz_taking_page.dart';
+import 'quiz_result_page.dart';
 
 class QuizIntroPage extends StatefulWidget {
   final int quizId;
@@ -20,7 +21,7 @@ class _QuizIntroPageState extends State<QuizIntroPage> {
   bool _isLoading = true;
   String _attemptsLeft = "Checking...";
   bool _canRetake = false;
-  String? _pastAttemptId;
+  Map<String, dynamic>? _latestAttempt;
 
   @override
   void initState() {
@@ -34,26 +35,88 @@ class _QuizIntroPageState extends State<QuizIntroPage> {
       final attempts = await apiService.getQuizAttempts(widget.quizId);
       if (attempts.isNotEmpty) {
         final latest = attempts.first;
-        _pastAttemptId = latest['attempt_id'].toString();
+        _latestAttempt = latest;
+
+        // Check if quiz was passed - handle both string and numeric types
+        final totalMarks = _parseDouble(latest['total_marks']);
+        final earnedMarks = _parseDouble(latest['earned_marks']);
+        final percentage = totalMarks > 0
+            ? (earnedMarks / totalMarks) * 100
+            : 0;
+
+        // Also check the database status
+        final attemptStatus = (latest['attempt_status'] ?? '')
+            .toString()
+            .toLowerCase();
+        final calculatedPass = percentage >= 70;
+        final databasePass = attemptStatus == 'passed';
+        final isPassed = calculatedPass || databasePass;
+
+        debugPrint('=== Quiz Intro Check ===');
+        debugPrint('Quiz ID: ${widget.quizId}');
+        debugPrint('Marks: $earnedMarks/$totalMarks');
+        debugPrint('Percentage: $percentage%');
+        debugPrint('Status from DB: $attemptStatus');
+        debugPrint('Final Pass Status: $isPassed');
+
         setState(() {
-          _attemptsLeft = "Limit Reached";
+          _attemptsLeft = isPassed ? "Passed" : "Failed";
           _canRetake = false;
           _isLoading = false;
+        });
+
+        // Automatically navigate to results page after a brief delay
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted && !_canRetake && _latestAttempt != null) {
+            debugPrint('Auto-navigating to results...');
+            _showResults();
+          }
         });
       } else {
         setState(() {
           _attemptsLeft = "1 Attempt Available";
           _canRetake = true;
           _isLoading = false;
+          _latestAttempt = null;
         });
       }
     } catch (e) {
+      debugPrint('Error checking attempts: $e');
       setState(() {
         _attemptsLeft = "Available";
         _canRetake = true;
         _isLoading = false;
+        _latestAttempt = null;
       });
     }
+  }
+
+  void _showResults() {
+    if (_latestAttempt == null) {
+      debugPrint('Cannot show results - no attempt data');
+      return;
+    }
+
+    // Safely parse integers from attempt data
+    final totalQuestions = _parseInt(_latestAttempt!['total_questions']);
+    final totalCorrect = _parseInt(_latestAttempt!['total_correct']);
+
+    debugPrint('Navigating to results: $totalCorrect/$totalQuestions');
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => QuizResultPage(
+          totalQuestions: totalQuestions,
+          correctAnswers: totalCorrect,
+        ),
+      ),
+    ).then((_) {
+      // Pop back to course details after viewing results
+      if (mounted) {
+        Navigator.pop(context, false);
+      }
+    });
   }
 
   @override
@@ -145,18 +208,15 @@ class _QuizIntroPageState extends State<QuizIntroPage> {
                             if (completed == true && mounted) {
                               Navigator.pop(context, true);
                             }
-                          } else if (_pastAttemptId != null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text("Review Mode Coming Soon!"),
-                              ),
-                            );
+                          } else if (_latestAttempt != null) {
+                            // Show results for completed quiz
+                            _showResults();
                           }
                         },
                   child: Text(
                     _isLoading
                         ? "Loading..."
-                        : (_canRetake ? "Start Quiz" : "Review Attempt"),
+                        : (_canRetake ? "Start Quiz" : "View Results"),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -196,5 +256,29 @@ class _QuizIntroPageState extends State<QuizIntroPage> {
         ],
       ),
     );
+  }
+
+  /// Helper method to safely parse double values from API
+  /// Handles both string and numeric types
+  double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      return double.tryParse(value) ?? 0.0;
+    }
+    return 0.0;
+  }
+
+  /// Helper method to safely parse integer values from API
+  /// Handles both string and numeric types
+  int _parseInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) {
+      return int.tryParse(value) ?? 0;
+    }
+    return 0;
   }
 }

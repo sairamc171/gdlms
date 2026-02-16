@@ -5,6 +5,7 @@ import 'profile_page.dart';
 import 'main.dart';
 import 'settings_page.dart';
 import 'dashboard_page.dart';
+import 'quiz_attempts_page.dart';
 
 class MenuPage extends StatelessWidget {
   const MenuPage({super.key});
@@ -86,6 +87,17 @@ class MenuPage extends StatelessWidget {
                     context,
                     MaterialPageRoute(
                       builder: (context) => const EnrolledCoursesPage(),
+                    ),
+                  ),
+                ),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.quiz_outlined,
+                  title: "Quiz Attempts",
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const QuizAttemptsPage(),
                     ),
                   ),
                 ),
