@@ -13,7 +13,6 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   int _selectedIndex = 0;
 
-  // Swapped ProfilePage with MenuPage
   final List<Widget> _pages = [
     const DashboardHomeContent(),
     const EnrolledCoursesPage(),
@@ -28,14 +27,12 @@ class _DashboardPageState extends State<DashboardPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        // Using your GD-logo asset
         title: Image.asset('assets/GD-logo.png', height: 50),
       ),
-      // IndexedStack keeps the state of pages alive when switching
       body: IndexedStack(index: _selectedIndex, children: _pages),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        selectedItemColor: const Color(0xFF4B2313), // Deep Brown
+        selectedItemColor: const Color(0xFF4B2313),
         unselectedItemColor: Colors.grey,
         onTap: (index) => setState(() => _selectedIndex = index),
         items: const [
@@ -57,9 +54,11 @@ class DashboardHomeContent extends StatefulWidget {
 
 class _DashboardHomeContentState extends State<DashboardHomeContent> {
   Map<String, int> stats = {'enrolled': 0, 'active': 0, 'completed': 0};
-  bool _isLoading = true;
+  bool _isLoadingStats = true;
+  bool _isLoadingPhoto = true;
+  String? _profilePhotoUrl;
+  String _displayName = "Student";
 
-  // Helper function to get initials (e.g., "Monish M" -> "MM")
   String _getInitials(String name) {
     if (name.isEmpty) return "S";
     List<String> parts = name.trim().split(RegExp(r'\s+'));
@@ -73,11 +72,12 @@ class _DashboardHomeContentState extends State<DashboardHomeContent> {
   void initState() {
     super.initState();
     _loadStats();
+    _loadProfile();
   }
 
   Future<void> _loadStats() async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    setState(() => _isLoadingStats = true);
     try {
       final List<dynamic> courses = await apiService.getEnrolledCourses();
       if (mounted) {
@@ -98,26 +98,81 @@ class _DashboardHomeContentState extends State<DashboardHomeContent> {
             'active': inProgressCount,
             'completed': finishedCount,
           };
-          _isLoading = false;
+          _isLoadingStats = false;
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoadingStats = false);
     }
+  }
+
+  Future<void> _loadProfile() async {
+    if (!mounted) return;
+    setState(() => _isLoadingPhoto = true);
+    try {
+      final data = await apiService.getUserProfile();
+      if (data != null && mounted) {
+        final String rawPhoto =
+            (data['user']?['profile_photo'] as String?) ?? '';
+        final String firstName = (data['user']?['first_name'] as String?) ?? '';
+        final String lastName = (data['user']?['last_name'] as String?) ?? '';
+        final String displayName =
+            (data['user']?['display_name'] as String?) ?? '';
+
+        String name = '';
+        if (firstName.isNotEmpty || lastName.isNotEmpty) {
+          name = '$firstName $lastName'.trim();
+        } else if (displayName.isNotEmpty) {
+          name = displayName;
+        } else {
+          name = apiService.user?['user_display_name'] ?? 'Student';
+        }
+
+        // Clear Flutter's entire image cache so no stale photo is served
+        imageCache.clear();
+        imageCache.clearLiveImages();
+
+        if (mounted) {
+          setState(() {
+            _profilePhotoUrl = rawPhoto.isNotEmpty
+                ? '$rawPhoto?nocache=${DateTime.now().millisecondsSinceEpoch}'
+                : null;
+            _displayName = name;
+            _isLoadingPhoto = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _displayName = apiService.user?['user_display_name'] ?? 'Student';
+            _isLoadingPhoto = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _displayName = apiService.user?['user_display_name'] ?? 'Student';
+          _isLoadingPhoto = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _onRefresh() async {
+    await Future.wait([_loadStats(), _loadProfile()]);
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = apiService.user;
-    String name = user?['user_display_name'] ?? "Student";
-    String initials = _getInitials(name);
+    final String initials = _getInitials(_displayName);
 
-    return _isLoading
+    return _isLoadingStats
         ? const Center(
             child: CircularProgressIndicator(color: Color(0xFF4B2313)),
           )
         : RefreshIndicator(
-            onRefresh: _loadStats,
+            onRefresh: _onRefresh,
             color: const Color(0xFF4B2313),
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -127,7 +182,6 @@ class _DashboardHomeContentState extends State<DashboardHomeContent> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Dashboard Title positioned in the middle above the icon
                     const Text(
                       "Dashboard",
                       style: TextStyle(
@@ -136,21 +190,25 @@ class _DashboardHomeContentState extends State<DashboardHomeContent> {
                       ),
                     ),
                     const SizedBox(height: 25),
-                    CircleAvatar(
-                      radius: 45,
-                      backgroundColor: const Color(0xFF4B2313),
-                      child: Text(
-                        initials,
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFF9F3E7),
-                        ),
-                      ),
-                    ),
+                    _isLoadingPhoto
+                        ? Container(
+                            width: 90,
+                            height: 90,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[200],
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Center(
+                              child: CircularProgressIndicator(
+                                color: Color(0xFF4B2313),
+                                strokeWidth: 3,
+                              ),
+                            ),
+                          )
+                        : _buildAvatar(initials),
                     const SizedBox(height: 12),
                     Text(
-                      "Welcome back, $name",
+                      "Welcome back, $_displayName",
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         color: Colors.grey,
@@ -182,6 +240,74 @@ class _DashboardHomeContentState extends State<DashboardHomeContent> {
               ),
             ),
           );
+  }
+
+  Widget _buildAvatar(String initials) {
+    if (_profilePhotoUrl != null) {
+      return ClipOval(
+        child: Image.network(
+          _profilePhotoUrl!,
+          width: 90,
+          height: 90,
+          fit: BoxFit.cover,
+          headers: const {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+          },
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Container(
+              width: 90,
+              height: 90,
+              color: Colors.grey[200],
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: const Color(0xFF4B2313),
+                  strokeWidth: 2,
+                  value: loadingProgress.expectedTotalBytes != null
+                      ? loadingProgress.cumulativeBytesLoaded /
+                            loadingProgress.expectedTotalBytes!
+                      : null,
+                ),
+              ),
+            );
+          },
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              width: 90,
+              height: 90,
+              decoration: const BoxDecoration(
+                color: Color(0xFF4B2313),
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  initials,
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFF9F3E7),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    return CircleAvatar(
+      radius: 45,
+      backgroundColor: const Color(0xFF4B2313),
+      child: Text(
+        initials,
+        style: const TextStyle(
+          fontSize: 32,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFFF9F3E7),
+        ),
+      ),
+    );
   }
 
   Widget _buildStatCard(String title, int count, IconData icon, Color color) {

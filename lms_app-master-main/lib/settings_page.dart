@@ -17,19 +17,18 @@ class _SettingsPageState extends State<SettingsPage>
   final Color primaryBrown = const Color(0xFF6D391E);
   late TabController _tabController;
 
-  // Profile data
   UserProfile? _profile;
   bool _isLoadingProfile = true;
   bool _isUploadingPhoto = false;
+  // Separate cache-bust key so we can force image reload after upload
+  int _photoCacheBust = 0;
   final ImagePicker _picker = ImagePicker();
 
-  // Controllers for Password Tab
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _isResetting = false;
 
-  // Controllers for Profile Tab
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -78,7 +77,6 @@ class _SettingsPageState extends State<SettingsPage>
 
   Future<void> _handlePhotoUpload() async {
     try {
-      // Check if image picker is available
       final bool isAvailable = await _picker.supportsImageSource(
         ImageSource.gallery,
       );
@@ -87,7 +85,6 @@ class _SettingsPageState extends State<SettingsPage>
         return;
       }
 
-      // Show options dialog
       final ImageSource? source = await showDialog<ImageSource>(
         context: context,
         builder: (context) => AlertDialog(
@@ -112,7 +109,6 @@ class _SettingsPageState extends State<SettingsPage>
 
       if (source == null) return;
 
-      // Pick image with error handling
       final XFile? image = await _picker
           .pickImage(
             source: source,
@@ -132,16 +128,21 @@ class _SettingsPageState extends State<SettingsPage>
 
       setState(() => _isUploadingPhoto = true);
 
-      // Upload to server
       final result = await apiService.uploadProfilePhoto(File(image.path));
 
       if (!mounted) return;
-      setState(() => _isUploadingPhoto = false);
 
       if (result != null && result['success'] == true) {
+        // Bump the cache-bust key BEFORE reloading so the new image
+        // is always fetched fresh from the server
+        setState(() {
+          _photoCacheBust = DateTime.now().millisecondsSinceEpoch;
+          _isUploadingPhoto = false;
+        });
         _showSuccess('Profile photo updated successfully!');
         await _loadProfile();
       } else {
+        setState(() => _isUploadingPhoto = false);
         _showError(result?['message'] ?? 'Failed to upload photo');
       }
     } on PlatformException catch (e) {
@@ -164,12 +165,10 @@ class _SettingsPageState extends State<SettingsPage>
       _showError("Please fill in all password fields");
       return;
     }
-
     if (newPass.length < 8) {
       _showError("Password must be at least 8 characters long");
       return;
     }
-
     final hasNumber = RegExp(r'[0-9]').hasMatch(newPass);
     final hasSpecial = RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(newPass);
     if (!hasNumber || !hasSpecial) {
@@ -178,25 +177,20 @@ class _SettingsPageState extends State<SettingsPage>
       );
       return;
     }
-
     if (currentPass == newPass) {
       _showError("New password cannot be the same as your current password");
       return;
     }
-
     if (newPass != confirmPass) {
       _showError("New passwords do not match!");
       return;
     }
 
     setState(() => _isResetting = true);
-
     try {
       final result = await apiService.resetPassword(currentPass, newPass);
-
       if (!mounted) return;
       setState(() => _isResetting = false);
-
       if (result['success']) {
         _showSuccess(result['message']);
         _currentPasswordController.clear();
@@ -219,7 +213,6 @@ class _SettingsPageState extends State<SettingsPage>
     }
 
     setState(() => _isUpdatingProfile = true);
-
     final profileData = {
       'first_name': _firstNameController.text,
       'last_name': _lastNameController.text,
@@ -230,10 +223,8 @@ class _SettingsPageState extends State<SettingsPage>
 
     try {
       final success = await apiService.updateUserProfile(profileData);
-
       if (!mounted) return;
       setState(() => _isUpdatingProfile = false);
-
       if (success) {
         _showSuccess("Profile updated successfully!");
         await _loadProfile();
@@ -257,6 +248,16 @@ class _SettingsPageState extends State<SettingsPage>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.green),
     );
+  }
+
+  /// Returns the photo URL with a cache-bust query param.
+  /// Uses _photoCacheBust if set (after upload), otherwise uses
+  /// the current timestamp so stale cached images are never shown.
+  String _buildPhotoUrl(String baseUrl) {
+    final bust = _photoCacheBust > 0
+        ? _photoCacheBust
+        : DateTime.now().millisecondsSinceEpoch;
+    return '$baseUrl?v=$bust';
   }
 
   @override
@@ -377,48 +378,60 @@ class _SettingsPageState extends State<SettingsPage>
       return const Center(child: Text('Failed to load profile'));
     }
 
+    final String photoUrl = _profile!.user.profilePhoto;
+    final bool hasPhoto = photoUrl.isNotEmpty;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Profile Photo Section
+          // Profile Photo Section — single CircleAvatar, no nesting
           Center(
             child: Stack(
               children: [
                 CircleAvatar(
                   radius: 60,
-                  backgroundColor: primaryBrown.withOpacity(0.1),
-                  child: CircleAvatar(
-                    radius: 55,
-                    backgroundColor: primaryBrown,
-                    backgroundImage: _profile!.user.profilePhoto.isNotEmpty
-                        ? NetworkImage(_profile!.user.profilePhoto)
-                        : null,
-                    child: _profile!.user.profilePhoto.isEmpty
-                        ? Text(
-                            _profile!.user.firstName.isNotEmpty
-                                ? _profile!.user.firstName[0].toUpperCase()
-                                : 'U',
-                            style: const TextStyle(
-                              fontSize: 48,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          )
-                        : null,
-                  ),
+                  // Light grey while photo loads; brown for initials fallback
+                  backgroundColor: hasPhoto ? Colors.grey[200] : primaryBrown,
+                  backgroundImage: hasPhoto
+                      ? NetworkImage(_buildPhotoUrl(photoUrl))
+                      : null,
+                  onBackgroundImageError: hasPhoto
+                      ? (_, __) {
+                          // Photo failed — fall back to initials
+                          if (mounted) setState(() {});
+                        }
+                      : null,
+                  child: !hasPhoto
+                      ? Text(
+                          _profile!.user.firstName.isNotEmpty
+                              ? _profile!.user.firstName[0].toUpperCase()
+                              : 'U',
+                          style: const TextStyle(
+                            fontSize: 48,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        )
+                      : null,
                 ),
+
+                // Upload progress overlay
                 if (_isUploadingPhoto)
                   Positioned.fill(
-                    child: CircleAvatar(
-                      radius: 60,
-                      backgroundColor: Colors.black.withOpacity(0.5),
-                      child: const CircularProgressIndicator(
-                        color: Colors.white,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
                       ),
                     ),
                   ),
+
+                // Camera button
                 Positioned(
                   bottom: 0,
                   right: 0,
@@ -451,7 +464,6 @@ class _SettingsPageState extends State<SettingsPage>
           ),
           const SizedBox(height: 30),
 
-          // Editable Fields
           _buildInputField(
             "First Name",
             "First Name",
@@ -496,32 +508,30 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           ),
           const SizedBox(height: 32),
-          Center(
-            child: SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _isUpdatingProfile ? null : _handleProfileUpdate,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryBrown,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: _isUpdatingProfile ? null : _handleProfileUpdate,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryBrown,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: _isUpdatingProfile
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Text(
-                        "Update Profile",
-                        style: TextStyle(color: Colors.white, fontSize: 16),
-                      ),
               ),
+              child: _isUpdatingProfile
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text(
+                      "Update Profile",
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
             ),
           ),
           const SizedBox(height: 40),

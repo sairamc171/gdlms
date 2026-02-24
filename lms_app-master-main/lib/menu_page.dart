@@ -101,16 +101,6 @@ class MenuPage extends StatelessWidget {
                     ),
                   ),
                 ),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.star_border,
-                  title: "Reviews",
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Reviews coming soon!')),
-                    );
-                  },
-                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Divider(

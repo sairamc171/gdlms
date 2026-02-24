@@ -19,8 +19,8 @@ class QuizIntroPage extends StatefulWidget {
 
 class _QuizIntroPageState extends State<QuizIntroPage> {
   bool _isLoading = true;
-  String _attemptsLeft = "Checking...";
-  bool _canRetake = false;
+  bool _hasPreviousAttempt = false;
+  bool _isPassed = false;
   Map<String, dynamic>? _latestAttempt;
 
   @override
@@ -33,49 +33,58 @@ class _QuizIntroPageState extends State<QuizIntroPage> {
     setState(() => _isLoading = true);
     try {
       final attempts = await apiService.getQuizAttempts(widget.quizId);
-      if (attempts.isNotEmpty) {
-        final latest = attempts.first;
+
+      // Filter to only real completed attempts (must have ended_at and marks)
+      final completedAttempts = attempts.where((a) {
+        final endedAt = a['attempt_ended_at']?.toString() ?? '';
+        final status = a['attempt_status']?.toString().toLowerCase() ?? '';
+        final earnedMarks = _parseDouble(a['earned_marks']);
+        final totalMarks = _parseDouble(a['total_marks']);
+
+        // A real attempt must have: a finished status AND total marks > 0
+        final hasValidStatus = [
+          'finished',
+          'passed',
+          'failed',
+          'attempt_ended',
+        ].contains(status);
+        final hasMarks = totalMarks > 0;
+        final hasEndTime =
+            endedAt.isNotEmpty && endedAt != '0000-00-00 00:00:00';
+
+        return hasValidStatus && hasMarks && hasEndTime;
+      }).toList();
+
+      if (completedAttempts.isNotEmpty) {
+        final latest = completedAttempts.first;
         _latestAttempt = latest;
 
-        // Check if quiz was passed - handle both string and numeric types
         final totalMarks = _parseDouble(latest['total_marks']);
         final earnedMarks = _parseDouble(latest['earned_marks']);
         final percentage = totalMarks > 0
             ? (earnedMarks / totalMarks) * 100
             : 0;
+        final dbStatus =
+            latest['attempt_status']?.toString().toLowerCase() ?? '';
 
-        // Also check the database status
-        final attemptStatus = (latest['attempt_status'] ?? '')
-            .toString()
-            .toLowerCase();
-        final calculatedPass = percentage >= 70;
-        final databasePass = attemptStatus == 'passed';
-        final isPassed = calculatedPass || databasePass;
-
-        debugPrint('=== Quiz Intro Check ===');
-        debugPrint('Quiz ID: ${widget.quizId}');
-        debugPrint('Marks: $earnedMarks/$totalMarks');
-        debugPrint('Percentage: $percentage%');
-        debugPrint('Status from DB: $attemptStatus');
-        debugPrint('Final Pass Status: $isPassed');
+        final isPassed = percentage >= 70 || dbStatus == 'passed';
 
         setState(() {
-          _attemptsLeft = isPassed ? "Passed" : "Failed";
-          _canRetake = false;
+          _hasPreviousAttempt = true;
+          _isPassed = isPassed;
           _isLoading = false;
         });
 
-        // Automatically navigate to results page after a brief delay
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted && !_canRetake && _latestAttempt != null) {
-            debugPrint('Auto-navigating to results...');
-            _showResults();
-          }
-        });
+        // Only auto-navigate to results if passed (failed = allow retry)
+        if (isPassed) {
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (mounted) _showResults();
+          });
+        }
       } else {
         setState(() {
-          _attemptsLeft = "1 Attempt Available";
-          _canRetake = true;
+          _hasPreviousAttempt = false;
+          _isPassed = false;
           _isLoading = false;
           _latestAttempt = null;
         });
@@ -83,8 +92,8 @@ class _QuizIntroPageState extends State<QuizIntroPage> {
     } catch (e) {
       debugPrint('Error checking attempts: $e');
       setState(() {
-        _attemptsLeft = "Available";
-        _canRetake = true;
+        _hasPreviousAttempt = false;
+        _isPassed = false;
         _isLoading = false;
         _latestAttempt = null;
       });
@@ -92,16 +101,10 @@ class _QuizIntroPageState extends State<QuizIntroPage> {
   }
 
   void _showResults() {
-    if (_latestAttempt == null) {
-      debugPrint('Cannot show results - no attempt data');
-      return;
-    }
+    if (_latestAttempt == null) return;
 
-    // Safely parse integers from attempt data
     final totalQuestions = _parseInt(_latestAttempt!['total_questions']);
     final totalCorrect = _parseInt(_latestAttempt!['total_correct']);
-
-    debugPrint('Navigating to results: $totalCorrect/$totalQuestions');
 
     Navigator.push(
       context,
@@ -109,18 +112,61 @@ class _QuizIntroPageState extends State<QuizIntroPage> {
         builder: (context) => QuizResultPage(
           totalQuestions: totalQuestions,
           correctAnswers: totalCorrect,
+          quizId: widget.quizId,
+          quizTitle: widget.quizTitle,
         ),
       ),
-    ).then((_) {
-      // Pop back to course details after viewing results
-      if (mounted) {
-        Navigator.pop(context, false);
+    ).then((result) {
+      if (!mounted) return;
+      if (result == 'retake') {
+        // User wants to retake — go to quiz taking page
+        _startQuiz();
+      } else {
+        Navigator.pop(context, result == true);
       }
     });
   }
 
+  Future<void> _startQuiz() async {
+    final bool? completed = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => QuizTakingPage(quizId: widget.quizId),
+      ),
+    );
+    if (completed == true && mounted) {
+      Navigator.pop(context, true);
+    } else if (mounted) {
+      // Refresh attempt status after retake
+      _checkAttempts();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Determine button label and action
+    String buttonLabel;
+    if (_isLoading) {
+      buttonLabel = "Loading...";
+    } else if (!_hasPreviousAttempt) {
+      buttonLabel = "Start Quiz";
+    } else if (_isPassed) {
+      buttonLabel = "View Results";
+    } else {
+      buttonLabel = "Retry Quiz";
+    }
+
+    String statusLabel;
+    if (_isLoading) {
+      statusLabel = "Checking...";
+    } else if (!_hasPreviousAttempt) {
+      statusLabel = "Not attempted";
+    } else if (_isPassed) {
+      statusLabel = "Passed ✓";
+    } else {
+      statusLabel = "Failed — Retry available";
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF9F3E7),
       appBar: AppBar(
@@ -173,17 +219,14 @@ class _QuizIntroPageState extends State<QuizIntroPage> {
               const Divider(color: Color(0xFFEEEEEE), thickness: 1.5),
               const SizedBox(height: 24),
               _buildDetailRow("Questions:", "10"),
-              _buildDetailRow("Status:", _attemptsLeft),
+              _buildDetailRow("Status:", statusLabel),
               _buildDetailRow("Passing Grade:", "70%"),
               const SizedBox(height: 40),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _canRetake
-                        ? const Color(0xFF6D391E)
-                        : Colors.grey[700],
-                    disabledBackgroundColor: Colors.grey[400],
+                    backgroundColor: const Color(0xFF6D391E),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(
@@ -193,30 +236,15 @@ class _QuizIntroPageState extends State<QuizIntroPage> {
                   ),
                   onPressed: _isLoading
                       ? null
-                      : () async {
-                          if (_canRetake) {
-                            // Navigate to quiz and wait for completion signal
-                            final bool? completed = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    QuizTakingPage(quizId: widget.quizId),
-                              ),
-                            );
-
-                            // If completed successfully, pop this intro page and return true to course details
-                            if (completed == true && mounted) {
-                              Navigator.pop(context, true);
-                            }
-                          } else if (_latestAttempt != null) {
-                            // Show results for completed quiz
+                      : () {
+                          if (_hasPreviousAttempt && _isPassed) {
                             _showResults();
+                          } else {
+                            _startQuiz();
                           }
                         },
                   child: Text(
-                    _isLoading
-                        ? "Loading..."
-                        : (_canRetake ? "Start Quiz" : "View Results"),
+                    buttonLabel,
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -258,27 +286,19 @@ class _QuizIntroPageState extends State<QuizIntroPage> {
     );
   }
 
-  /// Helper method to safely parse double values from API
-  /// Handles both string and numeric types
   double _parseDouble(dynamic value) {
     if (value == null) return 0.0;
     if (value is double) return value;
     if (value is int) return value.toDouble();
-    if (value is String) {
-      return double.tryParse(value) ?? 0.0;
-    }
+    if (value is String) return double.tryParse(value) ?? 0.0;
     return 0.0;
   }
 
-  /// Helper method to safely parse integer values from API
-  /// Handles both string and numeric types
   int _parseInt(dynamic value) {
     if (value == null) return 0;
     if (value is int) return value;
     if (value is double) return value.toInt();
-    if (value is String) {
-      return int.tryParse(value) ?? 0;
-    }
+    if (value is String) return int.tryParse(value) ?? 0;
     return 0;
   }
 }

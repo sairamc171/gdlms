@@ -88,7 +88,7 @@ class _QuizAttemptsPageState extends State<QuizAttemptsPage> {
     final totalQuestions = attempt['total_questions'] ?? 0;
     final totalCorrect = attempt['total_correct'] ?? 0;
 
-    // Handle both string and numeric values from API
+    // Handle both string and numeric values from API safely
     final totalMarks = _parseDouble(attempt['total_marks']);
     final earnedMarks = _parseDouble(attempt['earned_marks']);
 
@@ -99,18 +99,9 @@ class _QuizAttemptsPageState extends State<QuizAttemptsPage> {
     // Calculate percentage
     final percentage = totalMarks > 0 ? (earnedMarks / totalMarks) * 100 : 0;
 
-    // Check pass status from BOTH calculation AND database status
-    final calculatedPass = percentage >= 70;
-    final databasePass = attemptStatus.toLowerCase() == 'passed';
-    final isPassed = calculatedPass || databasePass;
-
-    debugPrint('Quiz: $quizTitle');
-    debugPrint('Marks: $earnedMarks/$totalMarks');
-    debugPrint('Percentage: $percentage%');
-    debugPrint('Status from DB: $attemptStatus');
-    debugPrint(
-      'Calculated Pass: $calculatedPass, DB Pass: $databasePass, Final: $isPassed',
-    );
+    // FIX: Use ONLY the calculated percentage to determine Pass/Fail label.
+    // Standard Tutor LMS passing grade is 70% or higher.
+    final bool isPassed = percentage >= 70;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -198,6 +189,7 @@ class _QuizAttemptsPageState extends State<QuizAttemptsPage> {
                 ),
                 const Spacer(),
                 Text(
+                  // Show the actual DB status string here for debugging, but it doesn't affect the label
                   attemptStatus.toUpperCase(),
                   style: TextStyle(
                     fontSize: 12,

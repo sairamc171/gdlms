@@ -28,7 +28,10 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
   double _videoProgress = 0.0;
   InAppWebViewController? _webViewController;
   bool _isButtonEnabled = false;
+
+  // Theme Colors
   final Color primaryBrown = const Color(0xFF6D391E);
+  final Color backgroundGrey = const Color(0xFFF7F7F7);
 
   @override
   void initState() {
@@ -50,11 +53,6 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
         value == 1 ||
         value.toString().toLowerCase() == "true")
       return true;
-    if (value is int && value > 1) return true;
-    if (value is String) {
-      final parsed = int.tryParse(value);
-      if (parsed != null && parsed > 1) return true;
-    }
     return false;
   }
 
@@ -63,16 +61,12 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
     return videoId.isNotEmpty;
   }
 
-  // Helper to safely parse integers for quiz results
   int _parseInt(dynamic value) {
     if (value == null) return 0;
     if (value is int) return value;
-    if (value is double) return value.toInt();
-    if (value is String) return int.tryParse(value) ?? 0;
-    return 0;
+    return int.tryParse(value.toString()) ?? 0;
   }
 
-  // Helper to check if quiz is completed and get result data
   Future<Map<String, dynamic>?> _checkQuizCompletion(int quizId) async {
     try {
       final attempts = await apiService.getQuizAttempts(quizId);
@@ -92,21 +86,17 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
       setState(() {
         _lessonData = data;
         _isLessonCompleted = isCompleted;
-
-        // SEQUENTIAL LOGIC: If no video is present, enable button immediately
-        if (hasNoVideo && !isCompleted) {
-          _isButtonEnabled = true;
-        }
-
+        if (hasNoVideo && !isCompleted) _isButtonEnabled = true;
         _isLoading = false;
       });
     }
   }
 
   Future<void> _syncCompletionToWebsite() async {
+    // Safety check: Don't run if already processing or already finished
     if (_isMarkingComplete || _isLessonCompleted) return;
-    setState(() => _isMarkingComplete = true);
 
+    setState(() => _isMarkingComplete = true);
     final result = await apiService.syncLessonWithWebsite(widget.lessonId);
 
     if (!mounted) return;
@@ -116,11 +106,10 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
         _isLessonCompleted = true;
         _isMarkingComplete = false;
       });
-
-      Future.delayed(const Duration(seconds: 1), () {
-        if (!mounted) return;
-        _handleNavigation(result['next_lesson_id']);
-      });
+      Future.delayed(
+        const Duration(seconds: 1),
+        () => _handleNavigation(result['next_lesson_id']),
+      );
     } else {
       setState(() => _isMarkingComplete = false);
     }
@@ -131,24 +120,15 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
       Navigator.pop(context, true);
       return;
     }
-
     final nextData = await apiService.getLessonDetails(
       int.parse(nextId.toString()),
     );
-
     if (!mounted || nextData == null) return;
 
     if (nextData['type'] == 'quiz') {
       final quizId = nextData['id'];
-      final quizTitle = nextData['title'];
-
-      // --- SMART ROUTING LOGIC ---
-      bool alreadyDone = _toBool(nextData['is_completed']);
-
-      if (alreadyDone) {
-        debugPrint('✓ Quiz already done. Routing to Results Page.');
+      if (_toBool(nextData['is_completed'])) {
         final attempt = await _checkQuizCompletion(quizId);
-
         if (attempt != null) {
           Navigator.pushReplacement(
             context,
@@ -162,17 +142,14 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
           return;
         }
       }
-
-      // Default to Intro Page if not done or data fetch failed
-      debugPrint('○ Routing to Quiz Intro.');
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (c) => QuizIntroPage(quizId: quizId, quizTitle: quizTitle),
+          builder: (c) =>
+              QuizIntroPage(quizId: quizId, quizTitle: nextData['title']),
         ),
       );
     } else {
-      // Standard Lesson Navigation
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -187,9 +164,8 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
+    if (_isLoading)
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
 
     final videoId = _lessonData!['video_id']?.toString() ?? '';
 
@@ -199,28 +175,56 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 0,
+        centerTitle: true,
         title: Text(
           _lessonData!['title'] ?? "Lesson",
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
       ),
       body: Column(
         children: [
-          if (videoId.isNotEmpty)
-            _buildPlayer(videoId)
-          else
-            const SizedBox(
-              height: 200,
-              child: Center(
-                child: Icon(Icons.article, size: 50, color: Colors.grey),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            decoration: BoxDecoration(
+              color: backgroundGrey,
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.shade300, width: 0.5),
               ),
             ),
+            child: videoId.isNotEmpty
+                ? _buildPlayer(videoId)
+                : const SizedBox(
+                    height: 200,
+                    child: Center(
+                      child: Icon(
+                        Icons.article_outlined,
+                        size: 60,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+          ),
+
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Html(data: _lessonData!['content'] ?? ""),
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+              child: Html(
+                data: _lessonData!['content'] ?? "",
+                style: {
+                  "body": Style(
+                    fontSize: FontSize(16.0),
+                    lineHeight: LineHeight(1.5),
+                    color: Colors.black87,
+                  ),
+                  "h2": Style(
+                    fontWeight: FontWeight.bold,
+                    margin: Margins.only(top: 10),
+                  ),
+                },
+              ),
             ),
           ),
+
           _buildSyncButton(),
         ],
       ),
@@ -229,59 +233,28 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
 
   Widget _buildPlayer(String videoId) {
     const String authorizedDomain = 'https://lms.gdcollege.ca/';
-
     final html =
         '''
-<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; overflow: hidden; }
-    #player-container { position: relative; width: 100%; height: 100vh; }
-    iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
-  </style>
-</head>
-<body>
-  <div id="player-container">
-    <iframe id="gumlet-player" 
-            src="https://play.gumlet.io/embed/$videoId" 
-            allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" 
-            allowfullscreen>
-    </iframe>
-  </div>
-  <script src="https://cdn.jsdelivr.net/npm/@gumlet/player.js@latest/dist/player.min.js"></script>
-  <script>
-    let lastProgress = 0;
-    function sendToApp(progress) {
-      if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-        window.flutter_inappwebview.callHandler('VideoProgress', { progress: progress });
-      }
-    }
-    function initPlayer() {
-      const iframe = document.getElementById('gumlet-player');
-      if (!iframe || typeof playerjs === 'undefined') { setTimeout(initPlayer, 500); return; }
-      try {
-        const player = new playerjs.Player(iframe);
-        player.on('ready', () => {
-          player.on('timeupdate', (data) => {
-            if (data && data.duration > 0) {
-              const progress = data.seconds / data.duration;
-              if (Math.abs(progress - lastProgress) >= 0.01) {
-                lastProgress = progress;
-                sendToApp(progress);
-              }
-            }
+      <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style> body { background: #F7F7F7; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+      #player-container { width: 90%; aspect-ratio: 16/9; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+      iframe { width: 100%; height: 100%; border: none; }</style></head>
+      <body><div id="player-container"><iframe id="gumlet-player" src="https://play.gumlet.io/embed/$videoId" allowfullscreen></iframe></div>
+      <script src="https://cdn.jsdelivr.net/npm/@gumlet/player.js@latest/dist/player.min.js"></script>
+      <script>
+        function sendToApp(progress) {
+          if (window.flutter_inappwebview) { window.flutter_inappwebview.callHandler('VideoProgress', { progress: progress }); }
+        }
+        window.onload = function() {
+          const player = new playerjs.Player(document.getElementById('gumlet-player'));
+          player.on('ready', () => {
+            player.on('timeupdate', (data) => {
+              if (data.duration > 0) { sendToApp(data.seconds / data.duration); }
+            });
           });
-        });
-      } catch(e) {}
-    }
-    window.onload = initPlayer;
-  </script>
-</body>
-</html>
-''';
+        }
+      </script></body></html>
+    ''';
 
     return AspectRatio(
       aspectRatio: 16 / 9,
@@ -293,28 +266,27 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
         initialSettings: InAppWebViewSettings(
           javaScriptEnabled: true,
           allowsInlineMediaPlayback: true,
-          mediaPlaybackRequiresUserGesture: false,
-          domStorageEnabled: true,
         ),
         onWebViewCreated: (controller) {
           _webViewController = controller;
           controller.addJavaScriptHandler(
             handlerName: 'VideoProgress',
             callback: (args) {
-              if (_isLessonCompleted) return;
+              if (_isLessonCompleted || args.isEmpty) return;
 
-              if (args.isNotEmpty && args[0] is Map) {
-                final data = args[0] as Map;
-                final progress = (data['progress'] as num?)?.toDouble() ?? 0.0;
-                if (mounted) {
-                  setState(() {
-                    _videoProgress = progress;
-                    // --- SEQUENTIAL LOGIC: Unlock at 90% ---
-                    if (progress >= 0.90 && !_isButtonEnabled) {
-                      _isButtonEnabled = true;
-                    }
-                  });
-                }
+              final progress = (args[0]['progress'] as num).toDouble();
+
+              if (mounted) {
+                setState(() {
+                  _videoProgress = progress;
+
+                  // LOGIC CHANGE: AUTO-CLICK / AUTO-SYNC
+                  if (progress >= 0.90 && !_isButtonEnabled) {
+                    _isButtonEnabled = true;
+                    // Automatically trigger the completion sync
+                    _syncCompletionToWebsite();
+                  }
+                });
               }
             },
           );
@@ -324,90 +296,73 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
   }
 
   Widget _buildSyncButton() {
-    if (_isLessonCompleted) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
+    bool isLocked = _hasVideo() && !_isButtonEnabled && !_isLessonCompleted;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            if (!isLocked && !_isLessonCompleted)
+              BoxShadow(
+                color: primaryBrown.withOpacity(0.3),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+          ],
+        ),
         child: ElevatedButton(
-          onPressed: null,
+          onPressed: (isLocked || _isMarkingComplete || _isLessonCompleted)
+              ? null
+              : _syncCompletionToWebsite,
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
+            backgroundColor: _isLessonCompleted
+                ? Colors.grey.shade400
+                : primaryBrown,
             foregroundColor: Colors.white,
-            disabledBackgroundColor: const Color.fromARGB(
-              255,
-              148,
-              148,
-              148,
-            ).withOpacity(0.7),
-            minimumSize: const Size(double.infinity, 54),
+            disabledBackgroundColor: _isLessonCompleted
+                ? Colors.grey.shade200
+                : Colors.grey.shade400,
+            minimumSize: const Size(double.infinity, 56),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
             elevation: 0,
           ),
-          child: const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Padding(
-                padding: EdgeInsets.only(right: 8),
-                child: Icon(Icons.check_circle, size: 18),
-              ),
-              Text(
-                "Completed",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    bool hasVideo = _hasVideo();
-    bool isLocked = hasVideo && !_isButtonEnabled;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
-      child: ElevatedButton(
-        onPressed: (isLocked || _isMarkingComplete)
-            ? null
-            : _syncCompletionToWebsite,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: primaryBrown,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: isLocked
-              ? Colors.grey[400]
-              : primaryBrown.withOpacity(0.7),
-          minimumSize: const Size(double.infinity, 54),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          elevation: isLocked ? 0 : 2,
-        ),
-        child: _isMarkingComplete
-            ? const SizedBox(
-                height: 24,
-                width: 24,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
-                ),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (isLocked)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 8),
-                      child: Icon(Icons.lock, size: 18),
-                    ),
-                  Text(
-                    isLocked ? "Mark as Complete" : "Mark as Complete",
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+          child: _isMarkingComplete
+              ? const SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
                   ),
-                ],
-              ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _isLessonCompleted
+                          ? Icons.check_circle
+                          : (isLocked
+                                ? Icons.lock
+                                : Icons.check_circle_outline),
+                      size: 20,
+                      color: Colors.white70,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      _isLessonCompleted ? "Completed" : "Mark as Completed",
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
       ),
     );
   }

@@ -3,11 +3,15 @@ import 'package:flutter/material.dart';
 class QuizResultPage extends StatelessWidget {
   final int totalQuestions;
   final int correctAnswers;
+  final int? quizId;
+  final String? quizTitle;
 
   const QuizResultPage({
     super.key,
     required this.totalQuestions,
     required this.correctAnswers,
+    this.quizId,
+    this.quizTitle,
   });
 
   @override
@@ -84,8 +88,8 @@ class QuizResultPage extends StatelessWidget {
             const SizedBox(height: 30),
             Text(
               isPassed
-                  ? "Excellent! You've unlocked the next lesson."
-                  : "You need 70% to pass and unlock the next content. Please try again.",
+                  ? "Excellent! You've passed this quiz."
+                  : "You need 70% to pass. Review the material and try again!",
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,
@@ -94,22 +98,48 @@ class QuizResultPage extends StatelessWidget {
               ),
             ),
             const Spacer(),
+            // Retry button — only shown on failure
+            if (!isPassed) ...[
+              SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6D391E),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(context).pop('retake'),
+                  child: const Text(
+                    "Retry Quiz",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             SizedBox(
               width: double.infinity,
               height: 55,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6D391E),
+                  backgroundColor: isPassed
+                      ? const Color(0xFF6D391E)
+                      : Colors.grey[200],
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                // Returns true to signal the previous page to refresh
                 onPressed: () => Navigator.of(context).pop(true),
-                child: const Text(
+                child: Text(
                   "Back to Course",
                   style: TextStyle(
-                    color: Colors.white,
+                    color: isPassed ? Colors.white : Colors.grey[700],
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),

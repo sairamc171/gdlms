@@ -23,6 +23,11 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _loadProfile() async {
     setState(() => _isLoading = true);
+
+    // Clear image cache so the latest photo always loads fresh
+    imageCache.clear();
+    imageCache.clearLiveImages();
+
     final data = await apiService.getUserProfile();
     if (data != null && mounted) {
       setState(() {
@@ -156,31 +161,58 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildProfileHeader() {
+    final String photoUrl = _profile!.user.profilePhoto;
+    final bool hasPhoto = photoUrl.isNotEmpty;
+    // Unique timestamp per load so Flutter cannot serve a cached version
+    final String photoUrlWithBust = hasPhoto
+        ? '$photoUrl?nocache=${DateTime.now().millisecondsSinceEpoch}'
+        : '';
+
+    final String initial = _profile!.user.firstName.isNotEmpty
+        ? _profile!.user.firstName[0].toUpperCase()
+        : _profile!.user.username.isNotEmpty
+        ? _profile!.user.username[0].toUpperCase()
+        : 'U';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
-          CircleAvatar(
-            radius: 60,
-            backgroundColor: const Color(0xFF6D391E).withOpacity(0.1),
-            child: CircleAvatar(
-              radius: 55,
-              backgroundColor: const Color(0xFF6D391E),
-              child: Text(
-                _profile!.user.firstName.isNotEmpty
-                    ? _profile!.user.firstName[0].toUpperCase()
-                    : _profile!.user.username[0].toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 48,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ),
+          // Use ClipOval + Image.network for full cache-control header support
+          hasPhoto
+              ? ClipOval(
+                  child: Image.network(
+                    photoUrlWithBust,
+                    width: 120,
+                    height: 120,
+                    fit: BoxFit.cover,
+                    headers: const {
+                      'Cache-Control': 'no-cache, no-store, must-revalidate',
+                      'Pragma': 'no-cache',
+                    },
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        width: 120,
+                        height: 120,
+                        color: Colors.grey[200],
+                        child: const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF6D391E),
+                            strokeWidth: 2,
+                          ),
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      return _initialsAvatar(initial, 60);
+                    },
+                  ),
+                )
+              : _initialsAvatar(initial, 60),
           const SizedBox(height: 16),
           Text(
-            '${_profile!.user.firstName} ${_profile!.user.lastName}',
+            '${_profile!.user.firstName} ${_profile!.user.lastName}'.trim(),
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -196,6 +228,21 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _initialsAvatar(String initial, double radius) {
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: const Color(0xFF6D391E),
+      child: Text(
+        initial,
+        style: TextStyle(
+          fontSize: radius * 0.8,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
       ),
     );
   }

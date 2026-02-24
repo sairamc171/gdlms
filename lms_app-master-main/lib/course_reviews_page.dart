@@ -136,14 +136,11 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
 
                             if (success) {
                               Navigator.pop(modalContext);
-
                               await Future.delayed(
                                 const Duration(milliseconds: 500),
                               );
-
                               if (mounted) {
                                 _fetchReviews();
-
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
@@ -191,6 +188,99 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
     );
   }
 
+  /// Returns initials from a display name e.g. "John Doe" -> "JD"
+  String _getInitials(String name) {
+    if (name.isEmpty) return '?';
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+    }
+    return parts.first[0].toUpperCase();
+  }
+
+  /// Builds the reviewer avatar — profile photo if available, else initials.
+  Widget _buildReviewerAvatar(dynamic review) {
+    final String photoUrl = (review['profile_photo'] as String?) ?? '';
+    final String name = (review['display_name'] as String?) ?? 'Student';
+    final String initials = _getInitials(name);
+
+    if (photoUrl.isNotEmpty && photoUrl.startsWith('http')) {
+      return ClipOval(
+        child: Image.network(
+          photoUrl,
+          width: 44,
+          height: 44,
+          fit: BoxFit.cover,
+          headers: const {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+          },
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Container(
+              width: 44,
+              height: 44,
+              color: Colors.grey[200],
+              child: Center(
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: primaryBrown,
+                  value: loadingProgress.expectedTotalBytes != null
+                      ? loadingProgress.cumulativeBytesLoaded /
+                            loadingProgress.expectedTotalBytes!
+                      : null,
+                ),
+              ),
+            );
+          },
+          errorBuilder: (_, __, ___) => _buildInitialsAvatar(initials),
+        ),
+      );
+    }
+
+    return _buildInitialsAvatar(initials);
+  }
+
+  Widget _buildInitialsAvatar(String initials) {
+    return CircleAvatar(
+      radius: 22,
+      backgroundColor: primaryBrown,
+      child: Text(
+        initials,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 15,
+        ),
+      ),
+    );
+  }
+
+  /// Formats "2024-01-15 10:30:00" -> "Jan 15, 2024"
+  String _formatDate(String raw) {
+    if (raw.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(raw);
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+    } catch (_) {
+      return raw;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -205,7 +295,7 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // Rating Summary
+                // ── Rating Summary ──────────────────────────────────
                 Container(
                   padding: const EdgeInsets.all(20),
                   color: Colors.grey[100],
@@ -248,7 +338,7 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
                   ),
                 ),
 
-                // Reviews List
+                // ── Reviews List ────────────────────────────────────
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: () => _fetchReviews(showLoader: false),
@@ -269,9 +359,20 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
                               final double reviewRating =
                                   double.tryParse(r['rating'].toString()) ??
                                   0.0;
+                              final String displayName =
+                                  (r['display_name'] as String?) ?? 'Student';
+                              final String content =
+                                  (r['comment_content'] as String?) ?? '';
+                              final String date = _formatDate(
+                                r['comment_date'] ?? '',
+                              );
 
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 12),
+                                elevation: 1,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                                 child: Padding(
                                   padding: const EdgeInsets.all(16),
                                   child: Column(
@@ -279,15 +380,11 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.center,
                                         children: [
-                                          CircleAvatar(
-                                            backgroundColor: primaryBrown
-                                                .withValues(alpha: 0.1),
-                                            child: Icon(
-                                              Icons.person,
-                                              color: primaryBrown,
-                                            ),
-                                          ),
+                                          // Profile photo or initials avatar
+                                          _buildReviewerAvatar(r),
                                           const SizedBox(width: 12),
                                           Expanded(
                                             child: Column(
@@ -295,42 +392,54 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
                                                   CrossAxisAlignment.start,
                                               children: [
                                                 Text(
-                                                  r['display_name'] ??
-                                                      "Student",
+                                                  displayName,
                                                   style: const TextStyle(
                                                     fontWeight: FontWeight.bold,
+                                                    fontSize: 15,
                                                   ),
                                                 ),
+                                                const SizedBox(height: 3),
                                                 Row(
                                                   children: List.generate(
                                                     5,
                                                     (i) => Icon(
-                                                      Icons.star,
-                                                      size: 14,
+                                                      i < reviewRating.floor()
+                                                          ? Icons.star
+                                                          : Icons.star_border,
+                                                      size: 15,
                                                       color:
                                                           i <
                                                               reviewRating
                                                                   .floor()
                                                           ? Colors.orange
-                                                          : Colors.grey,
+                                                          : Colors.grey[400],
                                                     ),
                                                   ),
                                                 ),
                                               ],
                                             ),
                                           ),
+                                          // Date top-right
+                                          Text(
+                                            date,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey[500],
+                                            ),
+                                          ),
                                         ],
                                       ),
-                                      const SizedBox(height: 12),
-                                      Text(r['comment_content'] ?? ""),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        r['comment_date'] ?? "",
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.grey,
+                                      if (content.isNotEmpty) ...[
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          content,
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            height: 1.5,
+                                            color: Colors.black87,
+                                          ),
                                         ),
-                                      ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -340,7 +449,7 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
                   ),
                 ),
 
-                // Write Review Button
+                // ── Write Review Button ─────────────────────────────
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: SizedBox(
