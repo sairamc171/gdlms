@@ -1,4 +1,4 @@
-package com.example.lms_login_app
+package ca.gdcollege.lms
 
 import io.flutter.embedding.android.FlutterActivity
 

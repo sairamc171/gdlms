@@ -93,7 +93,6 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
   }
 
   Future<void> _syncCompletionToWebsite() async {
-    // Safety check: Don't run if already processing or already finished
     if (_isMarkingComplete || _isLessonCompleted) return;
 
     setState(() => _isMarkingComplete = true);
@@ -181,53 +180,125 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
       ),
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            decoration: BoxDecoration(
-              color: backgroundGrey,
-              border: Border(
-                bottom: BorderSide(color: Colors.grey.shade300, width: 0.5),
-              ),
+      // OrientationBuilder switches layout between portrait and landscape
+      body: OrientationBuilder(
+        builder: (context, orientation) {
+          if (orientation == Orientation.landscape) {
+            return _buildLandscapeLayout(videoId);
+          } else {
+            return _buildPortraitLayout(videoId);
+          }
+        },
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // PORTRAIT: Original vertical stacked layout
+  // ─────────────────────────────────────────────
+  Widget _buildPortraitLayout(String videoId) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          decoration: BoxDecoration(
+            color: backgroundGrey,
+            border: Border(
+              bottom: BorderSide(color: Colors.grey.shade300, width: 0.5),
             ),
+          ),
+          child: videoId.isNotEmpty
+              ? _buildPlayer(videoId)
+              : const SizedBox(
+                  height: 200,
+                  child: Center(
+                    child: Icon(
+                      Icons.article_outlined,
+                      size: 60,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+            child: Html(
+              data: _lessonData!['content'] ?? "",
+              style: {
+                "body": Style(
+                  fontSize: FontSize(16.0),
+                  lineHeight: LineHeight(1.5),
+                  color: Colors.black87,
+                ),
+                "h2": Style(
+                  fontWeight: FontWeight.bold,
+                  margin: Margins.only(top: 10),
+                ),
+              },
+            ),
+          ),
+        ),
+        _buildSyncButton(),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // LANDSCAPE: Side-by-side layout
+  // Video on left, content + button on right
+  // ─────────────────────────────────────────────
+  Widget _buildLandscapeLayout(String videoId) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Left: Video player (fixed width based on screen)
+        Expanded(
+          flex: 5,
+          child: Container(
+            color: backgroundGrey,
+            padding: const EdgeInsets.all(12),
             child: videoId.isNotEmpty
-                ? _buildPlayer(videoId)
-                : const SizedBox(
-                    height: 200,
-                    child: Center(
-                      child: Icon(
-                        Icons.article_outlined,
-                        size: 60,
-                        color: Colors.grey,
-                      ),
+                ? Center(child: _buildPlayer(videoId))
+                : const Center(
+                    child: Icon(
+                      Icons.article_outlined,
+                      size: 60,
+                      color: Colors.grey,
                     ),
                   ),
           ),
+        ),
 
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-              child: Html(
-                data: _lessonData!['content'] ?? "",
-                style: {
-                  "body": Style(
-                    fontSize: FontSize(16.0),
-                    lineHeight: LineHeight(1.5),
-                    color: Colors.black87,
+        // Right: Scrollable content + button
+        Expanded(
+          flex: 5,
+          child: Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: Html(
+                    data: _lessonData!['content'] ?? "",
+                    style: {
+                      "body": Style(
+                        fontSize: FontSize(14.0),
+                        lineHeight: LineHeight(1.5),
+                        color: Colors.black87,
+                      ),
+                      "h2": Style(
+                        fontWeight: FontWeight.bold,
+                        margin: Margins.only(top: 8),
+                      ),
+                    },
                   ),
-                  "h2": Style(
-                    fontWeight: FontWeight.bold,
-                    margin: Margins.only(top: 10),
-                  ),
-                },
+                ),
               ),
-            ),
+              _buildSyncButton(compact: true),
+            ],
           ),
-
-          _buildSyncButton(),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -280,10 +351,8 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
                 setState(() {
                   _videoProgress = progress;
 
-                  // LOGIC CHANGE: AUTO-CLICK / AUTO-SYNC
                   if (progress >= 0.90 && !_isButtonEnabled) {
                     _isButtonEnabled = true;
-                    // Automatically trigger the completion sync
                     _syncCompletionToWebsite();
                   }
                 });
@@ -295,11 +364,14 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
     );
   }
 
-  Widget _buildSyncButton() {
+  // compact: true reduces padding in landscape so button fits without overflow
+  Widget _buildSyncButton({bool compact = false}) {
     bool isLocked = _hasVideo() && !_isButtonEnabled && !_isLessonCompleted;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
+      padding: compact
+          ? const EdgeInsets.fromLTRB(12, 4, 12, 12)
+          : const EdgeInsets.fromLTRB(20, 0, 20, 30),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
@@ -324,7 +396,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
             disabledBackgroundColor: _isLessonCompleted
                 ? Colors.grey.shade200
                 : Colors.grey.shade400,
-            minimumSize: const Size(double.infinity, 56),
+            minimumSize: Size(double.infinity, compact ? 46 : 56),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
@@ -354,8 +426,8 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
                     const SizedBox(width: 10),
                     Text(
                       _isLessonCompleted ? "Completed" : "Mark as Completed",
-                      style: const TextStyle(
-                        fontSize: 16,
+                      style: TextStyle(
+                        fontSize: compact ? 14 : 16,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 0.5,
                       ),

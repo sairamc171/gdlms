@@ -17,6 +17,7 @@ class CourseReviewsPage extends StatefulWidget {
 
 class _CourseReviewsPageState extends State<CourseReviewsPage> {
   List<dynamic> _reviews = [];
+  Map<String, dynamic>? _myReview; // Track current user's review
   double _ratingAvg = 0.0;
   int _ratingCount = 0;
   bool _isLoading = true;
@@ -34,14 +35,75 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
     final data = await apiService.getCourseRatings(widget.courseId);
 
     if (mounted && data != null) {
+      final List<dynamic> allReviews = data['reviews'] ?? [];
+
+      // Identify current user's review by matching display_name from ApiService
+      final String? currentUserName = apiService.user?['user_display_name'];
+
+      final myExistingReview = allReviews.firstWhere(
+        (r) => r['display_name'] == currentUserName,
+        orElse: () => null,
+      );
+
       setState(() {
-        _reviews = data['reviews'] ?? [];
+        _reviews = allReviews;
+        _myReview = myExistingReview;
         _ratingAvg = (data['rating_avg'] ?? 0.0).toDouble();
         _ratingCount = (data['rating_count'] ?? 0);
         _isLoading = false;
       });
     } else if (mounted) {
       setState(() => _isLoading = false);
+    }
+  }
+
+  // --- New Delete Review Logic ---
+  Future<void> _handleDeleteReview() async {
+    bool? confirm = await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Delete your review?"),
+        content: const Text(
+          "This will remove your previous rating so you can write a new one.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              "Delete",
+              style: TextStyle(color: Color(0xFF6D391E)),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => _isLoading = true);
+
+      // Attempt to delete
+      bool success = await apiService.deleteReview(widget.courseId);
+
+      if (mounted) {
+        // POLISH: Even if it fails (because the review was already deleted),
+        // we refresh the list to clear "ghost" reviews from the UI.
+        await _fetchReviews(showLoader: true);
+
+        if (success) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text("Review removed.")));
+        } else {
+          // If it failed but the refresh cleared the review, the user is still happy.
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text("List updated.")));
+        }
+      }
     }
   }
 
@@ -188,7 +250,6 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
     );
   }
 
-  /// Returns initials from a display name e.g. "John Doe" -> "JD"
   String _getInitials(String name) {
     if (name.isEmpty) return '?';
     final parts = name.trim().split(RegExp(r'\s+'));
@@ -198,7 +259,6 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
     return parts.first[0].toUpperCase();
   }
 
-  /// Builds the reviewer avatar — profile photo if available, else initials.
   Widget _buildReviewerAvatar(dynamic review) {
     final String photoUrl = (review['profile_photo'] as String?) ?? '';
     final String name = (review['display_name'] as String?) ?? 'Student';
@@ -256,7 +316,6 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
     );
   }
 
-  /// Formats "2024-01-15 10:30:00" -> "Jan 15, 2024"
   String _formatDate(String raw) {
     if (raw.isEmpty) return '';
     try {
@@ -295,7 +354,6 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // ── Rating Summary ──────────────────────────────────
                 Container(
                   padding: const EdgeInsets.all(20),
                   color: Colors.grey[100],
@@ -337,8 +395,6 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
                     ],
                   ),
                 ),
-
-                // ── Reviews List ────────────────────────────────────
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: () => _fetchReviews(showLoader: false),
@@ -383,7 +439,6 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.center,
                                         children: [
-                                          // Profile photo or initials avatar
                                           _buildReviewerAvatar(r),
                                           const SizedBox(width: 12),
                                           Expanded(
@@ -419,7 +474,6 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
                                               ],
                                             ),
                                           ),
-                                          // Date top-right
                                           Text(
                                             date,
                                             style: TextStyle(
@@ -448,26 +502,55 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
                           ),
                   ),
                 ),
-
-                // ── Write Review Button ─────────────────────────────
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: SizedBox(
                     width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _showWriteReviewSheet,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryBrown,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: const Text(
-                        "Write a Review",
-                        style: TextStyle(color: Colors.white, fontSize: 16),
-                      ),
-                    ),
+                    child: _myReview == null
+                        ? ElevatedButton(
+                            onPressed: _showWriteReviewSheet,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryBrown,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text(
+                              "Write a Review",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                              ),
+                            ),
+                          )
+                        : ElevatedButton.icon(
+                            onPressed: _handleDeleteReview,
+                            icon: const Icon(
+                              Icons.delete,
+                              color: Color(0xFF6D391E),
+                            ),
+                            label: const Text(
+                              "Delete My Review",
+                              style: TextStyle(
+                                color: Color(0xFF6D391E),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              elevation: 2,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              side: const BorderSide(
+                                color: Color(0xFF6D391E),
+                                width: 1,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
                   ),
                 ),
               ],

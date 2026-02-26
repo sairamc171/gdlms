@@ -49,5 +49,18 @@
 <string>We need access to your camera to update your profile photo</string>
 <key>NSPhotoLibraryUsageDescription</key>
 <string>We need access to your photo library to update your profile photo</string>
+<key>CFBundleURLTypes</key>
+<array>
+    <dict>
+        <key>CFBundleTypeRole</key>
+        <string>Editor</string>
+        <key>CFBundleURLName</key>
+        <string>ca.gdcollege.lms</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+            <string>gdcollege</string>
+        </array>
+    </dict>
+</array>
 </dict>
 </plist>

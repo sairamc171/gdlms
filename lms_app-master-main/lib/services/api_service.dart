@@ -511,16 +511,66 @@ class ApiService {
         '/$customNamespace/submit-review',
         data: {'course_id': courseId, 'rating': rating, 'comment': comment},
       );
-
-      return response.statusCode == 200 &&
-          response.data != null &&
-          response.data['success'] == true;
-    } on DioException catch (e) {
-      debugPrint("Submit Review Error: ${e.message}");
-      return false;
+      return response.statusCode == 200 && response.data['success'] == true;
     } catch (e) {
-      debugPrint("Submit Review Error: $e");
       return false;
+    }
+  }
+
+  // UPDATED: Logic to delete review
+  Future<bool> deleteReview(int courseId) async {
+    try {
+      final response = await _dio.delete(
+        '/$customNamespace/delete-review/$courseId',
+      );
+      return response.statusCode == 200 && response.data['success'] == true;
+    } catch (e) {
+      print("❌ Delete Review Error: $e");
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>> validateResetKey(int userId, String key) async {
+    try {
+      final response = await _dio.post(
+        '/$customNamespace/validate-reset-key',
+        data: {'user_id': userId, 'key': key},
+      );
+      if (response.statusCode == 200 && response.data != null) {
+        return Map<String, dynamic>.from(response.data);
+      }
+      return {'valid': false, 'message': 'Server error. Please try again.'};
+    } on DioException catch (e) {
+      debugPrint('Validate Reset Key Error: ${e.message}');
+      return {'valid': false, 'message': 'Network error. Please try again.'};
+    } catch (e) {
+      debugPrint('Validate Reset Key Error: $e');
+      return {'valid': false, 'message': 'An error occurred.'};
+    }
+  }
+
+  /// Step 2 — Submit the new password using the one-time reset key.
+  /// Returns { 'success': true/false, 'message': '...' }
+  Future<Map<String, dynamic>> setNewPasswordFromReset({
+    required int userId,
+    required String key,
+    required String newPassword,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/$customNamespace/set-new-password',
+        data: {'user_id': userId, 'key': key, 'new_password': newPassword},
+      );
+      if (response.statusCode == 200 && response.data != null) {
+        return Map<String, dynamic>.from(response.data);
+      }
+      return {'success': false, 'message': 'Server error. Please try again.'};
+    } on DioException catch (e) {
+      debugPrint('Set New Password Error: ${e.message}');
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (e) {
+      debugPrint('Set New Password Error: $e');
+      return {'success': false, 'message': 'An error occurred.'};
     }
   }
 }
