@@ -11,21 +11,92 @@ class QuizTakingPage extends StatefulWidget {
   State<QuizTakingPage> createState() => _QuizTakingPageState();
 }
 
-class _QuizTakingPageState extends State<QuizTakingPage> {
+class _QuizTakingPageState extends State<QuizTakingPage>
+    with SingleTickerProviderStateMixin {
   late Future<List<QuizQuestion>> _loadQuizFuture;
   int _currentIndex = 0;
   int? _selectedOptionHash;
   int _correctAnswersCount = 0;
   bool _isSubmitting = false;
+  late AnimationController _questionAnimController;
+  late Animation<double> _questionFade;
+  late Animation<Offset> _questionSlide;
 
   @override
   void initState() {
     super.initState();
     _loadQuizFuture = _initQuizSequence();
+    _questionAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _questionFade = CurvedAnimation(
+      parent: _questionAnimController,
+      curve: Curves.easeOut,
+    );
+    _questionSlide =
+        Tween<Offset>(begin: const Offset(0.04, 0), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _questionAnimController,
+            curve: Curves.easeOut,
+          ),
+        );
+    _questionAnimController.forward();
+  }
+
+  @override
+  void dispose() {
+    _questionAnimController.dispose();
+    super.dispose();
   }
 
   Future<List<QuizQuestion>> _initQuizSequence() async {
     return await apiService.getQuizQuestions(widget.quizId);
+  }
+
+  void _animateNextQuestion() {
+    _questionAnimController.forward(from: 0);
+  }
+
+  void _resetQuiz() {
+    setState(() {
+      _currentIndex = 0;
+      _selectedOptionHash = null;
+      _correctAnswersCount = 0;
+      _isSubmitting = false;
+      _loadQuizFuture = _initQuizSequence();
+    });
+    _questionAnimController.forward(from: 0);
+  }
+
+  Future<void> _handleFinish(int totalQuestions) async {
+    setState(() => _isSubmitting = true);
+
+    await apiService.syncLessonWithWebsite(
+      widget.quizId,
+      itemType: 'quiz',
+      earnedMarks: _correctAnswersCount,
+    );
+
+    if (!mounted) return;
+
+    final dynamic quizResult = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => QuizResultPage(
+          totalQuestions: totalQuestions,
+          correctAnswers: _correctAnswersCount,
+        ),
+      ),
+    );
+
+    if (mounted) {
+      if (quizResult == 'retake') {
+        _resetQuiz();
+      } else {
+        Navigator.pop(context, quizResult ?? false);
+      }
+    }
   }
 
   @override
@@ -33,157 +104,198 @@ class _QuizTakingPageState extends State<QuizTakingPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF9F3E7),
       appBar: AppBar(
-        title: const Text("Quiz Practice Mode"),
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFFF9F3E7),
         elevation: 0,
-        foregroundColor: Colors.black,
-        automaticallyImplyLeading: false,
+        foregroundColor: const Color(0xFF2C1A0E),
+        title: const Text(
+          "Quiz",
+          style: TextStyle(
+            fontFamily: 'Georgia',
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF2C1A0E),
+          ),
+        ),
+        centerTitle: true,
+        automaticallyImplyLeading: true,
       ),
       body: FutureBuilder<List<QuizQuestion>>(
         future: _loadQuizFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: Color(0xFF6D391E)),
+              child: CircularProgressIndicator(
+                color: Color(0xFF6D391E),
+                strokeWidth: 2.5,
+              ),
             );
           }
-          if (snapshot.hasError ||
-              !snapshot.hasData ||
-              snapshot.data!.isEmpty) {
-            return const Center(child: Text("Error loading quiz questions."));
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Center(
+              child: Text(
+                "Could not load questions.",
+                style: TextStyle(color: Color(0xFF6D391E)),
+              ),
+            );
           }
 
           final questions = snapshot.data!;
           final currentQuestion = questions[_currentIndex];
-          final bool isLastQuestion = _currentIndex == questions.length - 1;
+          final progress = (_currentIndex + 1) / questions.length;
 
-          return Padding(
-            padding: const EdgeInsets.all(16.0),
+          return SafeArea(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "Question: ${_currentIndex + 1}/${questions.length}",
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontWeight: FontWeight.bold,
+                // Progress bar
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Question ${_currentIndex + 1} of ${questions.length}",
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF9E7B5A),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          Text(
+                            "${(progress * 100).toInt()}%",
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF6D391E),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 6,
+                          backgroundColor: const Color(0xFFE8D8C4),
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Color(0xFF6D391E),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                Expanded(
+                  child: FadeTransition(
+                    opacity: _questionFade,
+                    child: SlideTransition(
+                      position: _questionSlide,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Question card
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(18),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(
+                                      0xFF6D391E,
+                                    ).withOpacity(0.06),
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Text(
+                                currentQuestion.text,
+                                style: const TextStyle(
+                                  fontFamily: 'Georgia',
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF2C1A0E),
+                                  height: 1.5,
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 20),
+
+                            // Options
+                            Expanded(
+                              child: ListView(
+                                children: _buildOptions(currentQuestion),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  "${_currentIndex + 1}. ${currentQuestion.text}",
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 30),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: _buildOptions(currentQuestion),
-                  ),
-                ),
-                SizedBox(
-                  width: double.infinity,
-                  height: 55,
+
+                // Bottom button
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6D391E),
+                      backgroundColor: _selectedOptionHash != null
+                          ? const Color(0xFF6D391E)
+                          : const Color(0xFFBFA080),
+                      minimumSize: const Size(double.infinity, 54),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                       ),
+                      elevation: 0,
                     ),
-                    onPressed: _isSubmitting
+                    onPressed: (_isSubmitting || _selectedOptionHash == null)
                         ? null
                         : () async {
-                            if (_selectedOptionHash == null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text("Please select an answer"),
-                                ),
-                              );
-                              return;
-                            }
-
-                            final selectedOption = currentQuestion.options
-                                .firstWhere(
-                                  (o) => o.text.hashCode == _selectedOptionHash,
-                                  orElse: () =>
-                                      QuizOption(text: '', isCorrect: false),
-                                );
-
-                            if (selectedOption.isCorrect)
-                              _correctAnswersCount++;
+                            final selected = currentQuestion.options.firstWhere(
+                              (o) => o.text.hashCode == _selectedOptionHash,
+                            );
+                            if (selected.isCorrect) _correctAnswersCount++;
 
                             if (_currentIndex < questions.length - 1) {
                               setState(() {
                                 _currentIndex++;
                                 _selectedOptionHash = null;
                               });
+                              _animateNextQuestion();
                             } else {
-                              setState(() => _isSubmitting = true);
-
-                              final result = await apiService
-                                  .syncLessonWithWebsite(
-                                    widget.quizId,
-                                    itemType: 'quiz',
-                                    earnedMarks: _correctAnswersCount,
-                                  );
-
-                              if (!mounted) return;
-
-                              if (result != null && result['success'] == true) {
-                                // Wait for result from Result Page
-                                final bool? refreshNeeded =
-                                    await Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => QuizResultPage(
-                                          totalQuestions: questions.length,
-                                          correctAnswers: _correctAnswersCount,
-                                        ),
-                                      ),
-                                    );
-
-                                // If ResultPage returned true, pop this page with true
-                                if (mounted) {
-                                  Navigator.pop(
-                                    context,
-                                    refreshNeeded ?? false,
-                                  );
-                                }
-                              } else {
-                                setState(() => _isSubmitting = false);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      "Server sync failed. Please check your connection.",
-                                    ),
-                                  ),
-                                );
-                              }
+                              _handleFinish(questions.length);
                             }
                           },
                     child: _isSubmitting
                         ? const SizedBox(
-                            height: 20,
-                            width: 20,
+                            width: 22,
+                            height: 22,
                             child: CircularProgressIndicator(
                               color: Colors.white,
-                              strokeWidth: 2,
+                              strokeWidth: 2.5,
                             ),
                           )
                         : Text(
-                            isLastQuestion ? "Finish Quiz" : "Next Question",
+                            _currentIndex == questions.length - 1
+                                ? "Finish Quiz"
+                                : "Next Question",
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.3,
                             ),
                           ),
                   ),
@@ -196,63 +308,84 @@ class _QuizTakingPageState extends State<QuizTakingPage> {
     );
   }
 
-  Widget _buildOptions(QuizQuestion question) {
-    return Column(
-      children: question.options.map((option) {
-        bool isSelected = _selectedOptionHash == option.text.hashCode;
-        Color bgColor = Colors.white;
-        Color borderColor = Colors.grey.shade300;
-        IconData icon = Icons.radio_button_unchecked;
+  List<Widget> _buildOptions(QuizQuestion question) {
+    return question.options.asMap().entries.map((entry) {
+      final index = entry.key;
+      final option = entry.value;
+      final isSelected = _selectedOptionHash == option.text.hashCode;
+      final labels = ['A', 'B', 'C', 'D', 'E', 'F'];
+      final label = index < labels.length ? labels[index] : '${index + 1}';
 
-        if (_selectedOptionHash != null) {
-          if (option.isCorrect) {
-            bgColor = Colors.green.shade50;
-            borderColor = Colors.green;
-            icon = Icons.check_circle;
-          } else if (isSelected) {
-            bgColor = Colors.red.shade50;
-            borderColor = Colors.red;
-            icon = Icons.cancel;
-          }
-        } else if (isSelected) {
-          borderColor = const Color(0xFF6D391E);
-          icon = Icons.radio_button_checked;
-        }
-
-        return GestureDetector(
-          onTap: () {
-            if (_selectedOptionHash != null) return;
-            setState(() => _selectedOptionHash = option.text.hashCode);
-          },
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: bgColor,
-              border: Border.all(color: borderColor, width: 2),
-              borderRadius: BorderRadius.circular(12),
+      return GestureDetector(
+        onTap: () => setState(() => _selectedOptionHash = option.text.hashCode),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? const Color(0xFF6D391E).withOpacity(0.08)
+                : Colors.white,
+            border: Border.all(
+              color: isSelected
+                  ? const Color(0xFF6D391E)
+                  : const Color(0xFFE0CDB8),
+              width: isSelected ? 2 : 1,
             ),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  color: isSelected || option.isCorrect
-                      ? (option.isCorrect ? Colors.green : Colors.red)
-                      : Colors.grey,
-                  size: 22,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF6D391E).withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? const Color(0xFF6D391E)
+                      : const Color(0xFFF0E6D8),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
+                child: Center(
                   child: Text(
-                    option.text,
-                    style: const TextStyle(fontSize: 16),
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected
+                          ? Colors.white
+                          : const Color(0xFF9E7B5A),
+                    ),
                   ),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  option.text,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: isSelected
+                        ? const Color(0xFF2C1A0E)
+                        : const Color(0xFF4A3728),
+                    fontWeight: isSelected
+                        ? FontWeight.w600
+                        : FontWeight.normal,
+                  ),
+                ),
+              ),
+            ],
           ),
-        );
-      }).toList(),
-    );
+        ),
+      );
+    }).toList();
   }
 }

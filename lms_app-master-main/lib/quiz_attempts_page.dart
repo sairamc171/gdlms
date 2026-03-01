@@ -227,16 +227,25 @@ class _QuizAttemptsPageState extends State<QuizAttemptsPage> {
     if (dateString.isEmpty) return 'Unknown date';
 
     try {
-      final date = DateTime.parse(dateString);
+      // WordPress stores local time without timezone suffix.
+      // Parse as local time by appending nothing — DateTime.parse without Z = local.
+      final date = DateTime.parse(dateString.trim());
       final now = DateTime.now();
-      final difference = now.difference(date);
 
-      if (difference.inDays == 0) {
+      // Compare date only (strip time component) for day labels
+      final dateOnly = DateTime(date.year, date.month, date.day);
+      final todayOnly = DateTime(now.year, now.month, now.day);
+      final difference = todayOnly.difference(dateOnly).inDays;
+
+      if (difference == 0) {
+        // Same day — show time instead
+        final hour = date.hour.toString().padLeft(2, '0');
+        final minute = date.minute.toString().padLeft(2, '0');
         return 'Today';
-      } else if (difference.inDays == 1) {
+      } else if (difference == 1) {
         return 'Yesterday';
-      } else if (difference.inDays < 7) {
-        return '${difference.inDays} days ago';
+      } else if (difference < 7) {
+        return '$difference days ago';
       } else {
         return '${date.day}/${date.month}/${date.year}';
       }

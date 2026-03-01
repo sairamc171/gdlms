@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'services/api_service.dart';
@@ -25,9 +26,12 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
   bool _isLoading = true;
   bool _isMarkingComplete = false;
   bool _isLessonCompleted = false;
-  double _videoProgress = 0.0;
   InAppWebViewController? _webViewController;
   bool _isButtonEnabled = false;
+
+  // ── Cached player to survive orientation rebuilds ──
+  final GlobalKey _webViewKey = GlobalKey();
+  Widget? _cachedPlayer;
 
   // Theme Colors
   final Color primaryBrown = const Color(0xFF6D391E);
@@ -36,23 +40,40 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
   @override
   void initState() {
     super.initState();
+    // Allow all orientations so video fullscreen works naturally
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     _fetchStatusFromWebsite();
   }
 
   @override
   void dispose() {
     _webViewController?.removeJavaScriptHandler(handlerName: 'VideoProgress');
+    _cachedPlayer = null;
+    // Restore portrait when leaving
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
     super.dispose();
   }
 
   bool _toBool(dynamic value) {
-    if (value == null || value == false || value == 0 || value == "0")
+    if (value == null || value == false || value == 0 || value == "0") {
       return false;
+    }
     if (value == true ||
         value == "1" ||
         value == 1 ||
-        value.toString().toLowerCase() == "true")
+        value.toString().toLowerCase() == "true") {
       return true;
+    }
+    final parsed = int.tryParse(value.toString());
+    if (parsed != null && parsed > 1) return true;
     return false;
   }
 
@@ -79,14 +100,21 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
 
   Future<void> _fetchStatusFromWebsite() async {
     final data = await apiService.getLessonDetails(widget.lessonId);
+
+    debugPrint('=== RAW is_completed: ${data?['is_completed']}');
+    debugPrint('=== TYPE: ${data?['is_completed'].runtimeType}');
+    debugPrint('=== _toBool result: ${_toBool(data?['is_completed'])}');
+
     if (data != null && mounted) {
       final isCompleted = _toBool(data['is_completed']);
-      final hasNoVideo = (data['video_id']?.toString() ?? '').isEmpty;
+      debugPrint('=== isCompleted final: $isCompleted');
 
+      final hasNoVideo = (data['video_id']?.toString() ?? '').isEmpty;
       setState(() {
         _lessonData = data;
         _isLessonCompleted = isCompleted;
         if (hasNoVideo && !isCompleted) _isButtonEnabled = true;
+        if (isCompleted) _isButtonEnabled = true;
         _isLoading = false;
       });
     }
@@ -105,29 +133,30 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
         _isLessonCompleted = true;
         _isMarkingComplete = false;
       });
-      Future.delayed(
-        const Duration(seconds: 1),
-        () => _handleNavigation(result['next_lesson_id']),
-      );
     } else {
       setState(() => _isMarkingComplete = false);
     }
   }
 
   void _handleNavigation(dynamic nextId) async {
+    if (!mounted) return;
+
     if (nextId == null || nextId == 0) {
       Navigator.pop(context, true);
       return;
     }
+
     final nextData = await apiService.getLessonDetails(
       int.parse(nextId.toString()),
     );
+
     if (!mounted || nextData == null) return;
 
     if (nextData['type'] == 'quiz') {
       final quizId = nextData['id'];
       if (_toBool(nextData['is_completed'])) {
         final attempt = await _checkQuizCompletion(quizId);
+        if (!mounted) return;
         if (attempt != null) {
           Navigator.pushReplacement(
             context,
@@ -141,6 +170,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
           return;
         }
       }
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -163,8 +193,9 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading)
+    if (_isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     final videoId = _lessonData!['video_id']?.toString() ?? '';
 
@@ -180,21 +211,20 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
       ),
-      // OrientationBuilder switches layout between portrait and landscape
-      body: OrientationBuilder(
-        builder: (context, orientation) {
-          if (orientation == Orientation.landscape) {
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isLandscape = constraints.maxWidth > constraints.maxHeight;
+          if (isLandscape) {
             return _buildLandscapeLayout(videoId);
-          } else {
-            return _buildPortraitLayout(videoId);
           }
+          return _buildPortraitLayout(videoId);
         },
       ),
     );
   }
 
   // ─────────────────────────────────────────────
-  // PORTRAIT: Original vertical stacked layout
+  // PORTRAIT
   // ─────────────────────────────────────────────
   Widget _buildPortraitLayout(String videoId) {
     return Column(
@@ -245,14 +275,12 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
   }
 
   // ─────────────────────────────────────────────
-  // LANDSCAPE: Side-by-side layout
-  // Video on left, content + button on right
+  // LANDSCAPE
   // ─────────────────────────────────────────────
   Widget _buildLandscapeLayout(String videoId) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Left: Video player (fixed width based on screen)
         Expanded(
           flex: 5,
           child: Container(
@@ -269,8 +297,6 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
                   ),
           ),
         ),
-
-        // Right: Scrollable content + button
         Expanded(
           flex: 5,
           child: Column(
@@ -302,69 +328,93 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
     );
   }
 
+  // ─────────────────────────────────────────────
+  // PLAYER — built once, cached to survive rebuilds
+  // ─────────────────────────────────────────────
   Widget _buildPlayer(String videoId) {
+    // Return the cached instance if it already exists.
+    // This prevents the WebView from being destroyed and recreated
+    // on every orientation change, which caused the crash.
+    if (_cachedPlayer != null) return _cachedPlayer!;
+
     const String authorizedDomain = 'https://lms.gdcollege.ca/';
     final html =
         '''
-      <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style> body { background: #F7F7F7; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
-      #player-container { width: 90%; aspect-ratio: 16/9; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-      iframe { width: 100%; height: 100%; border: none; }</style></head>
-      <body><div id="player-container"><iframe id="gumlet-player" src="https://play.gumlet.io/embed/$videoId" allowfullscreen></iframe></div>
-      <script src="https://cdn.jsdelivr.net/npm/@gumlet/player.js@latest/dist/player.min.js"></script>
-      <script>
-        function sendToApp(progress) {
-          if (window.flutter_inappwebview) { window.flutter_inappwebview.callHandler('VideoProgress', { progress: progress }); }
-        }
-        window.onload = function() {
-          const player = new playerjs.Player(document.getElementById('gumlet-player'));
-          player.on('ready', () => {
-            player.on('timeupdate', (data) => {
-              if (data.duration > 0) { sendToApp(data.seconds / data.duration); }
+      <!DOCTYPE html><html><head>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body { background: #F7F7F7; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        #player-container { width: 90%; aspect-ratio: 16/9; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        iframe { width: 100%; height: 100%; border: none; }
+      </style></head>
+      <body>
+        <div id="player-container">
+          <iframe id="gumlet-player" src="https://play.gumlet.io/embed/$videoId" allowfullscreen></iframe>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/@gumlet/player.js@latest/dist/player.min.js"></script>
+        <script>
+          function sendToApp(progress) {
+            if (window.flutter_inappwebview) {
+              window.flutter_inappwebview.callHandler('VideoProgress', { progress: progress });
+            }
+          }
+          window.onload = function() {
+            const player = new playerjs.Player(document.getElementById('gumlet-player'));
+            player.on('ready', () => {
+              player.on('timeupdate', (data) => {
+                if (data.duration > 0) { sendToApp(data.seconds / data.duration); }
+              });
             });
-          });
-        }
-      </script></body></html>
+          }
+        </script>
+      </body></html>
     ''';
 
-    return AspectRatio(
-      aspectRatio: 16 / 9,
-      child: InAppWebView(
-        initialData: InAppWebViewInitialData(
-          data: html,
-          baseUrl: WebUri(authorizedDomain),
+    _cachedPlayer = KeyedSubtree(
+      key: _webViewKey,
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: InAppWebView(
+          initialData: InAppWebViewInitialData(
+            data: html,
+            baseUrl: WebUri(authorizedDomain),
+          ),
+          initialSettings: InAppWebViewSettings(
+            javaScriptEnabled: true,
+            allowsInlineMediaPlayback: true,
+            mediaPlaybackRequiresUserGesture: false,
+            // Let the webview handle its own fullscreen natively
+            // without Flutter intercepting and rebuilding the widget tree
+            supportZoom: false,
+          ),
+          onWebViewCreated: (controller) {
+            _webViewController = controller;
+            controller.addJavaScriptHandler(
+              handlerName: 'VideoProgress',
+              callback: (args) {
+                if (_isLessonCompleted || args.isEmpty) return;
+                final progress = (args[0]['progress'] as num).toDouble();
+                if (mounted) {
+                  setState(() {
+                    if (progress >= 0.00 && !_isButtonEnabled) {
+                      _isButtonEnabled = true;
+                      _syncCompletionToWebsite();
+                    }
+                  });
+                }
+              },
+            );
+          },
+          // No onEnterFullscreen/onExitFullscreen callbacks —
+          // those triggered Flutter to rebuild mid-transition causing the crash.
+          // The webview now handles fullscreen entirely on its own natively.
         ),
-        initialSettings: InAppWebViewSettings(
-          javaScriptEnabled: true,
-          allowsInlineMediaPlayback: true,
-        ),
-        onWebViewCreated: (controller) {
-          _webViewController = controller;
-          controller.addJavaScriptHandler(
-            handlerName: 'VideoProgress',
-            callback: (args) {
-              if (_isLessonCompleted || args.isEmpty) return;
-
-              final progress = (args[0]['progress'] as num).toDouble();
-
-              if (mounted) {
-                setState(() {
-                  _videoProgress = progress;
-
-                  if (progress >= 0.90 && !_isButtonEnabled) {
-                    _isButtonEnabled = true;
-                    _syncCompletionToWebsite();
-                  }
-                });
-              }
-            },
-          );
-        },
       ),
     );
+
+    return _cachedPlayer!;
   }
 
-  // compact: true reduces padding in landscape so button fits without overflow
   Widget _buildSyncButton({bool compact = false}) {
     bool isLocked = _hasVideo() && !_isButtonEnabled && !_isLessonCompleted;
 
@@ -378,7 +428,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
           boxShadow: [
             if (!isLocked && !_isLessonCompleted)
               BoxShadow(
-                color: primaryBrown.withOpacity(0.3),
+                color: primaryBrown.withValues(alpha: 0.3),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -387,7 +437,12 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
         child: ElevatedButton(
           onPressed: (isLocked || _isMarkingComplete || _isLessonCompleted)
               ? null
-              : _syncCompletionToWebsite,
+              : () async {
+                  await _syncCompletionToWebsite();
+                  if (mounted && _isLessonCompleted) {
+                    _handleNavigation(_lessonData?['next_lesson_id']);
+                  }
+                },
           style: ElevatedButton.styleFrom(
             backgroundColor: _isLessonCompleted
                 ? Colors.grey.shade400

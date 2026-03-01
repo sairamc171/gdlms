@@ -221,6 +221,7 @@ class ApiService {
       final response = await _dio.get('/$customNamespace/lesson/$lessonId');
 
       if (response.statusCode == 200 && response.data != null) {
+        debugPrint('🔍 FULL LESSON RESPONSE: ${response.data}');
         return response.data['lesson'];
       }
     } on DioException catch (e) {
