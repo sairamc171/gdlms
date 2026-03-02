@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'app_theme.dart';
 import 'services/api_service.dart';
 import 'models/user_profile.dart';
 import 'package:flutter/services.dart';
@@ -14,13 +15,10 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage>
     with SingleTickerProviderStateMixin {
-  final Color primaryBrown = const Color(0xFF6D391E);
   late TabController _tabController;
-
   UserProfile? _profile;
   bool _isLoadingProfile = true;
   bool _isUploadingPhoto = false;
-  // Separate cache-bust key so we can force image reload after upload
   int _photoCacheBust = 0;
   final ImagePicker _picker = ImagePicker();
 
@@ -88,25 +86,33 @@ class _SettingsPageState extends State<SettingsPage>
       final ImageSource? source = await showDialog<ImageSource>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Choose Photo Source'),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Text('Choose Photo Source', style: AppTheme.cardTitle),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.camera_alt),
-                title: const Text('Camera'),
+                leading: Icon(
+                  Icons.camera_alt_outlined,
+                  color: AppTheme.primary,
+                ),
+                title: Text('Camera', style: AppTheme.bodyMedium),
                 onTap: () => Navigator.pop(context, ImageSource.camera),
               ),
               ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Gallery'),
+                leading: Icon(
+                  Icons.photo_library_outlined,
+                  color: AppTheme.primary,
+                ),
+                title: Text('Gallery', style: AppTheme.bodyMedium),
                 onTap: () => Navigator.pop(context, ImageSource.gallery),
               ),
             ],
           ),
         ),
       );
-
       if (source == null) return;
 
       final XFile? image = await _picker
@@ -120,26 +126,21 @@ class _SettingsPageState extends State<SettingsPage>
             _showError('Failed to pick image: $error');
             return null;
           });
-
       if (image == null) {
         _showError('No image selected');
         return;
       }
 
       setState(() => _isUploadingPhoto = true);
-
       final result = await apiService.uploadProfilePhoto(File(image.path));
-
       if (!mounted) return;
 
       if (result != null && result['success'] == true) {
-        // Bump the cache-bust key BEFORE reloading so the new image
-        // is always fetched fresh from the server
         setState(() {
           _photoCacheBust = DateTime.now().millisecondsSinceEpoch;
           _isUploadingPhoto = false;
         });
-        _showSuccess('Profile photo updated successfully!');
+        _showSuccess('Profile photo updated!');
         await _loadProfile();
       } else {
         setState(() => _isUploadingPhoto = false);
@@ -160,29 +161,25 @@ class _SettingsPageState extends State<SettingsPage>
     final String currentPass = _currentPasswordController.text;
     final String newPass = _newPasswordController.text;
     final String confirmPass = _confirmPasswordController.text;
-
     if (currentPass.isEmpty || newPass.isEmpty || confirmPass.isEmpty) {
       _showError("Please fill in all password fields");
       return;
     }
     if (newPass.length < 8) {
-      _showError("Password must be at least 8 characters long");
+      _showError("Password must be at least 8 characters");
       return;
     }
-    final hasNumber = RegExp(r'[0-9]').hasMatch(newPass);
-    final hasSpecial = RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(newPass);
-    if (!hasNumber || !hasSpecial) {
-      _showError(
-        "Password must include at least one number and one special character",
-      );
+    if (!RegExp(r'[0-9]').hasMatch(newPass) ||
+        !RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(newPass)) {
+      _showError("Password must include a number and a special character");
       return;
     }
     if (currentPass == newPass) {
-      _showError("New password cannot be the same as your current password");
+      _showError("New password cannot match current password");
       return;
     }
     if (newPass != confirmPass) {
-      _showError("New passwords do not match!");
+      _showError("Passwords do not match");
       return;
     }
 
@@ -211,22 +208,19 @@ class _SettingsPageState extends State<SettingsPage>
       _showError("First name and last name are required");
       return;
     }
-
     setState(() => _isUpdatingProfile = true);
-    final profileData = {
-      'first_name': _firstNameController.text,
-      'last_name': _lastNameController.text,
-      'phone': _phoneController.text,
-      'job_title': _jobTitleController.text,
-      'bio': _bioController.text,
-    };
-
     try {
-      final success = await apiService.updateUserProfile(profileData);
+      final success = await apiService.updateUserProfile({
+        'first_name': _firstNameController.text,
+        'last_name': _lastNameController.text,
+        'phone': _phoneController.text,
+        'job_title': _jobTitleController.text,
+        'bio': _bioController.text,
+      });
       if (!mounted) return;
       setState(() => _isUpdatingProfile = false);
       if (success) {
-        _showSuccess("Profile updated successfully!");
+        _showSuccess("Profile updated!");
         await _loadProfile();
       } else {
         _showError("Failed to update profile");
@@ -238,21 +232,30 @@ class _SettingsPageState extends State<SettingsPage>
     }
   }
 
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
-  }
+  void _showError(String msg) => ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        msg,
+        style: AppTheme.labelMedium.copyWith(color: Colors.white),
+      ),
+      backgroundColor: Colors.red,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ),
+  );
 
-  void _showSuccess(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.green),
-    );
-  }
+  void _showSuccess(String msg) => ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        msg,
+        style: AppTheme.labelMedium.copyWith(color: Colors.white),
+      ),
+      backgroundColor: AppTheme.completed,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ),
+  );
 
-  /// Returns the photo URL with a cache-bust query param.
-  /// Uses _photoCacheBust if set (after upload), otherwise uses
-  /// the current timestamp so stale cached images are never shown.
   String _buildPhotoUrl(String baseUrl) {
     final bust = _photoCacheBust > 0
         ? _photoCacheBust
@@ -263,46 +266,34 @@ class _SettingsPageState extends State<SettingsPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          "Settings",
-          style: TextStyle(
-            color: Colors.black,
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
+      backgroundColor: AppTheme.background,
+      appBar: AppTheme.buildAppBar(title: "Settings"),
       body: _isLoadingProfile
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF6D391E)),
+              child: CircularProgressIndicator(color: AppTheme.primary),
             )
           : Column(
               children: [
+                // Tab bar
                 Container(
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: Colors.black12, width: 1),
-                    ),
-                  ),
+                  color: AppTheme.surface,
                   child: TabBar(
                     controller: _tabController,
-                    indicatorColor: primaryBrown,
-                    labelColor: primaryBrown,
-                    unselectedLabelColor: Colors.black54,
+                    indicatorColor: AppTheme.primary,
+                    indicatorWeight: 2,
+                    labelColor: AppTheme.primary,
+                    unselectedLabelColor: AppTheme.textSecondary,
+                    labelStyle: AppTheme.labelMedium.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    unselectedLabelStyle: AppTheme.labelMedium,
                     tabs: const [
                       Tab(text: "Profile"),
                       Tab(text: "Password"),
                     ],
                   ),
                 ),
+                Container(height: 1, color: AppTheme.divider),
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
@@ -316,56 +307,57 @@ class _SettingsPageState extends State<SettingsPage>
 
   Widget _buildPasswordTab() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildInputField(
             "Current Password",
-            "Current Password",
+            "Enter current password",
             isPassword: true,
             controller: _currentPasswordController,
           ),
           _buildInputField(
             "New Password",
-            "Type Password",
+            "Enter new password",
             isPassword: true,
             controller: _newPasswordController,
           ),
           _buildInputField(
-            "Re-type New Password",
-            "Type Password",
+            "Confirm New Password",
+            "Re-enter new password",
             isPassword: true,
             controller: _confirmPasswordController,
           ),
-          const SizedBox(height: 24),
-          Center(
-            child: SizedBox(
-              width: 180,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _isResetting ? null : _handlePasswordReset,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryBrown,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+          const SizedBox(height: 28),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton(
+              onPressed: _isResetting ? null : _handlePasswordReset,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: _isResetting
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Text(
-                        "Reset Password",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white, fontSize: 16),
-                      ),
               ),
+              child: _isResetting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Text(
+                      "Reset Password",
+                      style: AppTheme.bodyMedium.copyWith(
+                        color: AppTheme.surface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
             ),
           ),
         ],
@@ -374,32 +366,36 @@ class _SettingsPageState extends State<SettingsPage>
   }
 
   Widget _buildProfileTab() {
-    if (_profile == null) {
-      return const Center(child: Text('Failed to load profile'));
-    }
+    if (_profile == null)
+      return Center(
+        child: Text(
+          'Failed to load profile',
+          style: AppTheme.bodyMedium.copyWith(color: Colors.grey[400]),
+        ),
+      );
 
     final String photoUrl = _profile!.user.profilePhoto;
     final bool hasPhoto = photoUrl.isNotEmpty;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 28, 20, 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Profile Photo Section — single CircleAvatar, no nesting
+          // Avatar
           Center(
             child: Stack(
               children: [
                 CircleAvatar(
-                  radius: 60,
-                  // Light grey while photo loads; brown for initials fallback
-                  backgroundColor: hasPhoto ? Colors.grey[200] : primaryBrown,
+                  radius: 56,
+                  backgroundColor: hasPhoto
+                      ? AppTheme.placeholder
+                      : AppTheme.primary,
                   backgroundImage: hasPhoto
                       ? NetworkImage(_buildPhotoUrl(photoUrl))
                       : null,
                   onBackgroundImageError: hasPhoto
                       ? (_, __) {
-                          // Photo failed — fall back to initials
                           if (mounted) setState(() {});
                         }
                       : null,
@@ -408,21 +404,17 @@ class _SettingsPageState extends State<SettingsPage>
                           _profile!.user.firstName.isNotEmpty
                               ? _profile!.user.firstName[0].toUpperCase()
                               : 'U',
-                          style: const TextStyle(
-                            fontSize: 48,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                          style: AppTheme.headingLarge.copyWith(
+                            color: AppTheme.surface,
                           ),
                         )
                       : null,
                 ),
-
-                // Upload progress overlay
                 if (_isUploadingPhoto)
                   Positioned.fill(
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
+                        color: Colors.black.withValues(alpha: 0.5),
                         shape: BoxShape.circle,
                       ),
                       child: const Center(
@@ -430,23 +422,21 @@ class _SettingsPageState extends State<SettingsPage>
                       ),
                     ),
                   ),
-
-                // Camera button
                 Positioned(
                   bottom: 0,
                   right: 0,
                   child: GestureDetector(
                     onTap: _isUploadingPhoto ? null : _handlePhotoUpload,
                     child: Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(7),
                       decoration: BoxDecoration(
-                        color: primaryBrown,
+                        color: AppTheme.primary,
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
+                        border: Border.all(color: AppTheme.surface, width: 2),
                       ),
                       child: const Icon(
-                        Icons.camera_alt,
-                        size: 20,
+                        Icons.camera_alt_rounded,
+                        size: 18,
                         color: Colors.white,
                       ),
                     ),
@@ -455,14 +445,11 @@ class _SettingsPageState extends State<SettingsPage>
               ],
             ),
           ),
-          const SizedBox(height: 10),
-          const Center(
-            child: Text(
-              'Tap camera icon to upload photo',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
+          const SizedBox(height: 8),
+          Center(
+            child: Text('Tap to update photo', style: AppTheme.labelSmall),
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 28),
 
           _buildInputField(
             "First Name",
@@ -475,7 +462,7 @@ class _SettingsPageState extends State<SettingsPage>
             controller: _lastNameController,
           ),
           _buildInputField(
-            "User Name",
+            "Username",
             _profile!.user.username,
             isReadOnly: true,
           ),
@@ -486,55 +473,72 @@ class _SettingsPageState extends State<SettingsPage>
             controller: _phoneController,
           ),
           _buildInputField(
-            "Skill/Occupation",
-            "Skill/Occupation",
+            "Skill / Occupation",
+            "Skill / Occupation",
             controller: _jobTitleController,
           ),
-          const SizedBox(height: 20),
-          const Text(
-            "Bio",
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _bioController,
-            maxLines: 5,
-            decoration: InputDecoration(
-              hintText: "Write your bio here...",
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              contentPadding: const EdgeInsets.all(12),
+
+          const SizedBox(height: 4),
+          Text(
+            "Biography",
+            style: AppTheme.labelMedium.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
             ),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: AppTheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[200]!),
+            ),
+            child: TextField(
+              controller: _bioController,
+              maxLines: 5,
+              style: AppTheme.bodyMedium,
+              decoration: InputDecoration(
+                hintText: "Write your bio here...",
+                hintStyle: AppTheme.bodyMedium.copyWith(
+                  color: Colors.grey[400],
+                ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.all(14),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 28),
           SizedBox(
             width: double.infinity,
-            height: 50,
+            height: 52,
             child: ElevatedButton(
               onPressed: _isUpdatingProfile ? null : _handleProfileUpdate,
               style: ElevatedButton.styleFrom(
-                backgroundColor: primaryBrown,
+                backgroundColor: AppTheme.primary,
+                elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(14),
                 ),
               ),
               child: _isUpdatingProfile
                   ? const SizedBox(
-                      height: 20,
                       width: 20,
+                      height: 20,
                       child: CircularProgressIndicator(
                         color: Colors.white,
                         strokeWidth: 2,
                       ),
                     )
-                  : const Text(
+                  : Text(
                       "Update Profile",
-                      style: TextStyle(color: Colors.white, fontSize: 16),
+                      style: AppTheme.bodyMedium.copyWith(
+                        color: AppTheme.surface,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
             ),
           ),
-          const SizedBox(height: 40),
         ],
       ),
     );
@@ -548,29 +552,43 @@ class _SettingsPageState extends State<SettingsPage>
     TextEditingController? controller,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            style: AppTheme.labelMedium.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
           ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: controller,
-            readOnly: isReadOnly,
-            obscureText: isPassword,
-            decoration: InputDecoration(
-              filled: isReadOnly,
-              fillColor: isReadOnly ? Colors.grey[200] : Colors.transparent,
-              hintText: hint,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+          const SizedBox(height: 7),
+          Container(
+            decoration: BoxDecoration(
+              color: isReadOnly ? AppTheme.background : AppTheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[200]!),
+            ),
+            child: TextField(
+              controller: controller,
+              readOnly: isReadOnly,
+              obscureText: isPassword,
+              style: AppTheme.bodyMedium.copyWith(
+                color: isReadOnly
+                    ? AppTheme.textSecondary
+                    : AppTheme.textPrimary,
               ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 16,
+              decoration: InputDecoration(
+                hintText: hint,
+                hintStyle: AppTheme.bodyMedium.copyWith(
+                  color: Colors.grey[400],
+                ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
               ),
             ),
           ),

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:app_links/app_links.dart';
 import 'dart:async';
+import 'app_theme.dart';
 import 'dashboard_page.dart';
 import 'services/api_service.dart';
 import 'forgot_password_page.dart';
-import 'course_details_page.dart'; // for courseRouteObserver
+import 'course_details_page.dart';
 import 'reset_password_page.dart';
 import 'package:flutter/services.dart';
 
@@ -31,7 +32,6 @@ class _MyAppState extends State<MyApp> {
   final _navigatorKey = GlobalKey<NavigatorState>();
   late final AppLinks _appLinks;
   StreamSubscription? _linkSubscription;
-
   ResetPasswordPage? _pendingPage;
 
   @override
@@ -106,11 +106,7 @@ class _MyAppState extends State<MyApp> {
       navigatorKey: _navigatorKey,
       navigatorObservers: [courseRouteObserver],
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF6D391E),
-      ),
-
+      theme: AppTheme.themeData, // ← single source of truth
       home: _buildHome(),
     );
   }
@@ -119,21 +115,17 @@ class _MyAppState extends State<MyApp> {
     if (_pendingPage != null) {
       final page = _pendingPage!;
       _pendingPage = null;
-
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _navigatorKey.currentState?.push(
           MaterialPageRoute(builder: (_) => page),
         );
       });
     }
-
     return apiService.isLoggedIn ? const DashboardPage() : const LoginPage();
   }
 }
 
-// ---------------------------------------------------------------------------
-// Login Page — pixel-matched to the provided design screenshot
-// ---------------------------------------------------------------------------
+// ── Login Page ───────────────────────────────────────────────────────────────
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -149,8 +141,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _keepSignedIn = false;
   bool _obscurePassword = true;
 
-  // Colors extracted from the screenshot
-  static const Color _brown = Color(0xFF6D391E);
+  // Login page keeps its own warm beige bg — intentionally distinct from app bg
   static const Color _bgBeige = Color(0xFFEDE8DF);
 
   @override
@@ -170,23 +161,23 @@ class _LoginPageState extends State<LoginPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Logo centered at top ──
+              // Logo
               const SizedBox(height: 48),
               Center(child: Image.asset('assets/GD-logo.png', height: 75)),
 
-              // ── Large left-aligned welcome text ──
+              // Welcome heading
               const SizedBox(height: 52),
-              const Text(
+              Text(
                 'Hi,\nWelcome back!',
-                style: TextStyle(
+                style: AppTheme.headingLarge.copyWith(
                   fontSize: 38,
                   fontWeight: FontWeight.w800,
-                  color: _brown,
+                  color: AppTheme.primary,
                   height: 1.15,
                 ),
               ),
 
-              // ── Email / Username field ──
+              // Username field
               const SizedBox(height: 36),
               _buildPillField(
                 controller: _userController,
@@ -194,7 +185,7 @@ class _LoginPageState extends State<LoginPage> {
                 prefixIcon: Icons.email_outlined,
               ),
 
-              // ── Password field ──
+              // Password field
               const SizedBox(height: 16),
               _buildPillField(
                 controller: _passController,
@@ -215,7 +206,7 @@ class _LoginPageState extends State<LoginPage> {
                 onSubmitted: (_) => _handleLogin(),
               ),
 
-              // ── Keep signed in + Forgot Password ──
+              // Keep signed in + Forgot Password
               const SizedBox(height: 14),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -229,7 +220,7 @@ class _LoginPageState extends State<LoginPage> {
                           value: _keepSignedIn,
                           onChanged: (v) =>
                               setState(() => _keepSignedIn = v ?? false),
-                          activeColor: _brown,
+                          activeColor: AppTheme.primary,
                           side: BorderSide(
                             color: Colors.grey.shade500,
                             width: 1.5,
@@ -240,11 +231,10 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      const Text(
+                      Text(
                         'Keep me signed in',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: _brown,
+                        style: AppTheme.labelMedium.copyWith(
+                          color: AppTheme.primary,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -257,11 +247,10 @@ class _LoginPageState extends State<LoginPage> {
                         builder: (_) => const ForgotPasswordPage(),
                       ),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Forgot Password?',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: _brown,
+                      style: AppTheme.labelMedium.copyWith(
+                        color: AppTheme.primary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -269,14 +258,14 @@ class _LoginPageState extends State<LoginPage> {
                 ],
               ),
 
-              // ── Sign In button with shadow ──
+              // Sign In button
               const SizedBox(height: 36),
               Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(50),
                   boxShadow: [
                     BoxShadow(
-                      color: _brown.withOpacity(0.35),
+                      color: AppTheme.primary.withValues(alpha: 0.35),
                       blurRadius: 18,
                       offset: const Offset(0, 7),
                     ),
@@ -287,8 +276,8 @@ class _LoginPageState extends State<LoginPage> {
                   height: 58,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _brown,
-                      foregroundColor: Colors.white,
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: AppTheme.surface,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(50),
@@ -304,11 +293,12 @@ class _LoginPageState extends State<LoginPage> {
                               strokeWidth: 2.5,
                             ),
                           )
-                        : const Text(
+                        : Text(
                             'Sign In',
-                            style: TextStyle(
+                            style: AppTheme.bodyMedium.copyWith(
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
+                              color: AppTheme.surface,
                               letterSpacing: 0.3,
                             ),
                           ),
@@ -324,7 +314,6 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  /// White pill-shaped input field with prefix icon
   Widget _buildPillField({
     required TextEditingController controller,
     required String hint,
@@ -335,11 +324,11 @@ class _LoginPageState extends State<LoginPage> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.surface,
         borderRadius: BorderRadius.circular(50),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -349,10 +338,10 @@ class _LoginPageState extends State<LoginPage> {
         controller: controller,
         obscureText: obscure,
         onSubmitted: onSubmitted,
-        style: const TextStyle(fontSize: 15, color: Colors.black87),
+        style: AppTheme.bodyMedium.copyWith(color: AppTheme.textPrimary),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 15),
+          hintStyle: AppTheme.bodyMedium.copyWith(color: Colors.grey.shade400),
           prefixIcon: Icon(prefixIcon, color: Colors.grey.shade500, size: 22),
           suffixIcon: suffixIcon,
           border: InputBorder.none,

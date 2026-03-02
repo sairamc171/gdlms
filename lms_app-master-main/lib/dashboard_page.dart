@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_theme.dart';
 import 'services/api_service.dart';
 import 'enrolled_courses_page.dart';
 import 'menu_page.dart';
@@ -22,24 +23,51 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.surface,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: AppTheme.surface,
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
         centerTitle: true,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: AppTheme.divider),
+        ),
         title: Image.asset('assets/GD-logo.png', height: 50),
       ),
       body: IndexedStack(index: _selectedIndex, children: _pages),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        selectedItemColor: const Color(0xFF4B2313),
-        unselectedItemColor: Colors.grey,
-        onTap: (index) => setState(() => _selectedIndex = index),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.book), label: 'Courses'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Menu'),
-        ],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          border: Border(top: BorderSide(color: AppTheme.divider)),
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _selectedIndex,
+          selectedItemColor: AppTheme.primary,
+          unselectedItemColor: Colors.grey[400],
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          selectedLabelStyle: AppTheme.navLabelSelected,
+          unselectedLabelStyle: AppTheme.navLabelUnselected,
+          onTap: (index) => setState(() => _selectedIndex = index),
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_outlined),
+              activeIcon: Icon(Icons.home),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.menu_book_outlined),
+              activeIcon: Icon(Icons.menu_book),
+              label: 'Courses',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline),
+              activeIcon: Icon(Icons.person),
+              label: 'Menu',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -128,7 +156,6 @@ class _DashboardHomeContentState extends State<DashboardHomeContent> {
           name = apiService.user?['user_display_name'] ?? 'Student';
         }
 
-        // Clear Flutter's entire image cache so no stale photo is served
         imageCache.clear();
         imageCache.clearLiveImages();
 
@@ -169,86 +196,103 @@ class _DashboardHomeContentState extends State<DashboardHomeContent> {
 
     return _isLoadingStats
         ? const Center(
-            child: CircularProgressIndicator(color: Color(0xFF4B2313)),
+            child: CircularProgressIndicator(color: AppTheme.primary),
           )
         : RefreshIndicator(
             onRefresh: _onRefresh,
-            color: const Color(0xFF4B2313),
+            color: AppTheme.primary,
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(24),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const Text(
-                      "Dashboard",
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Hero header ──────────────────────────────
+                  Container(
+                    width: double.infinity,
+                    color: AppTheme.surface,
+                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _isLoadingPhoto
+                            ? Container(
+                                width: 64,
+                                height: 64,
+                                decoration: const BoxDecoration(
+                                  color: AppTheme.placeholder,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    color: AppTheme.primary,
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              )
+                            : _buildAvatar(initials, 32),
+
+                        const SizedBox(height: 18),
+
+                        Text("Welcome back,", style: AppTheme.welcomeSub),
+                        const SizedBox(height: 2),
+                        Text(_displayName, style: AppTheme.headingLarge),
+                      ],
                     ),
-                    const SizedBox(height: 25),
-                    _isLoadingPhoto
-                        ? Container(
-                            width: 90,
-                            height: 90,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[200],
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Center(
-                              child: CircularProgressIndicator(
-                                color: Color(0xFF4B2313),
-                                strokeWidth: 3,
+                  ),
+
+                  // ── Stats section ────────────────────────────
+                  Container(
+                    color: AppTheme.background,
+                    padding: const EdgeInsets.fromLTRB(20, 28, 20, 40),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("OVERVIEW", style: AppTheme.overline),
+                        const SizedBox(height: 16),
+
+                        // Primary large card
+                        _buildPrimaryStatCard(
+                          label: "Enrolled Courses",
+                          count: stats['enrolled']!,
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildSecondaryStatCard(
+                                label: "In Progress",
+                                count: stats['active']!,
+                                accent: AppTheme.inProgress,
                               ),
                             ),
-                          )
-                        : _buildAvatar(initials),
-                    const SizedBox(height: 12),
-                    Text(
-                      "Welcome back, $_displayName",
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildSecondaryStatCard(
+                                label: "Completed",
+                                count: stats['completed']!,
+                                accent: AppTheme.completed,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 40),
-                    _buildStatCard(
-                      "Enrolled Courses",
-                      stats['enrolled']!,
-                      Icons.collections_bookmark,
-                      const Color(0xFF4B2313),
-                    ),
-                    _buildStatCard(
-                      "In Progress",
-                      stats['active']!,
-                      Icons.play_lesson,
-                      Colors.orange,
-                    ),
-                    _buildStatCard(
-                      "Finished",
-                      stats['completed']!,
-                      Icons.check_circle,
-                      Colors.green,
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           );
   }
 
-  Widget _buildAvatar(String initials) {
+  Widget _buildAvatar(String initials, double radius) {
     if (_profilePhotoUrl != null) {
       return ClipOval(
         child: Image.network(
           _profilePhotoUrl!,
-          width: 90,
-          height: 90,
+          width: radius * 2,
+          height: radius * 2,
           fit: BoxFit.cover,
           headers: const {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -257,92 +301,104 @@ class _DashboardHomeContentState extends State<DashboardHomeContent> {
           loadingBuilder: (context, child, loadingProgress) {
             if (loadingProgress == null) return child;
             return Container(
-              width: 90,
-              height: 90,
-              color: Colors.grey[200],
-              child: Center(
+              width: radius * 2,
+              height: radius * 2,
+              color: AppTheme.placeholder,
+              child: const Center(
                 child: CircularProgressIndicator(
-                  color: const Color(0xFF4B2313),
+                  color: AppTheme.primary,
                   strokeWidth: 2,
-                  value: loadingProgress.expectedTotalBytes != null
-                      ? loadingProgress.cumulativeBytesLoaded /
-                            loadingProgress.expectedTotalBytes!
-                      : null,
                 ),
               ),
             );
           },
-          errorBuilder: (context, error, stackTrace) {
-            return Container(
-              width: 90,
-              height: 90,
-              decoration: const BoxDecoration(
-                color: Color(0xFF4B2313),
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Text(
-                  initials,
-                  style: const TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFF9F3E7),
-                  ),
-                ),
-              ),
-            );
-          },
+          errorBuilder: (context, error, stackTrace) =>
+              _initialsAvatar(initials, radius),
         ),
       );
     }
+    return _initialsAvatar(initials, radius);
+  }
 
+  Widget _initialsAvatar(String initials, double radius) {
     return CircleAvatar(
-      radius: 45,
-      backgroundColor: const Color(0xFF4B2313),
+      radius: radius,
+      backgroundColor: AppTheme.primary,
       child: Text(
         initials,
-        style: const TextStyle(
-          fontSize: 32,
-          fontWeight: FontWeight.bold,
-          color: Color(0xFFF9F3E7),
+        style: AppTheme.bodyMedium.copyWith(
+          fontSize: radius * 0.7,
+          fontWeight: FontWeight.w600,
+          color: AppTheme.surface,
         ),
       ),
     );
   }
 
-  Widget _buildStatCard(String title, int count, IconData icon, Color color) {
+  Widget _buildPrimaryStatCard({required String label, required int count}) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9F3E7),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.1)),
-      ),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
+      decoration: AppTheme.primaryCardDecoration,
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(count.toString(), style: AppTheme.displayLarge),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: AppTheme.labelMedium.copyWith(
+                    color: AppTheme.surface.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppTheme.surface.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.collections_bookmark_outlined,
+              color: AppTheme.surface,
+              size: 24,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSecondaryStatCard({
+    required String label,
+    required int count,
+    required Color accent,
+  }) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+      decoration: AppTheme.cardDecoration,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            width: 36,
+            height: 4,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 26),
-          ),
-          const SizedBox(width: 20),
-          Text(
-            title,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          const Spacer(),
-          Text(
-            count.toString(),
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
-              color: color,
+              color: accent,
+              borderRadius: BorderRadius.circular(2),
             ),
           ),
+          const SizedBox(height: 14),
+          Text(count.toString(), style: AppTheme.statCount),
+          const SizedBox(height: 4),
+          Text(label, style: AppTheme.labelSmall),
         ],
       ),
     );

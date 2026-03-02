@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_theme.dart';
 import '../services/api_service.dart';
 
 class QuizAttemptsPage extends StatefulWidget {
@@ -20,63 +21,57 @@ class _QuizAttemptsPageState extends State<QuizAttemptsPage> {
 
   Future<void> _loadAllAttempts() async {
     setState(() => _isLoading = true);
-
     try {
       final attempts = await apiService.getAllUserQuizAttempts();
-
       setState(() {
         _allAttempts = attempts;
         _isLoading = false;
       });
     } catch (e) {
       debugPrint("Error loading quiz attempts: $e");
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F3E7),
-      appBar: AppBar(
-        title: const Text("Quiz Attempts"),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        foregroundColor: Colors.black,
-      ),
+      backgroundColor: AppTheme.background,
+      appBar: AppTheme.buildAppBar(title: "Quiz Attempts"),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF6D391E)),
+              child: CircularProgressIndicator(color: AppTheme.primary),
             )
           : _allAttempts.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.quiz_outlined, size: 80, color: Colors.grey[400]),
-                  const SizedBox(height: 16),
+                  Icon(Icons.quiz_outlined, size: 56, color: Colors.grey[300]),
+                  const SizedBox(height: 14),
                   Text(
                     "No quiz attempts yet",
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
+                    style: AppTheme.bodyMedium.copyWith(
+                      color: Colors.grey[400],
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Complete a quiz to see results here",
+                    style: AppTheme.labelSmall,
                   ),
                 ],
               ),
             )
           : RefreshIndicator(
               onRefresh: _loadAllAttempts,
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
+              color: AppTheme.primary,
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
                 itemCount: _allAttempts.length,
-                itemBuilder: (context, index) {
-                  final attempt = _allAttempts[index];
-                  return _buildAttemptCard(attempt);
-                },
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) =>
+                    _buildAttemptCard(_allAttempts[index]),
               ),
             ),
     );
@@ -86,85 +81,103 @@ class _QuizAttemptsPageState extends State<QuizAttemptsPage> {
     final quizTitle = attempt['quiz_title'] ?? 'Unknown Quiz';
     final totalQuestions = attempt['total_questions'] ?? 0;
     final totalCorrect = attempt['total_correct'] ?? 0;
-
     final totalMarks = _parseDouble(attempt['total_marks']);
     final earnedMarks = _parseDouble(attempt['earned_marks']);
-
-    final percentage = totalMarks > 0 ? (earnedMarks / totalMarks) * 100 : 0;
+    final double percentage = totalMarks > 0
+        ? (earnedMarks / totalMarks) * 100
+        : 0;
     final bool isPassed = percentage >= 70;
+    final Color statusColor = isPassed ? AppTheme.completed : Colors.red[700]!;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
+    return Container(
+      decoration: AppTheme.cardDecoration,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    quizTitle,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF2D2D2D),
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isPassed
-                        ? Colors.green.withValues(alpha: 0.1)
-                        : Colors.red.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isPassed
-                          ? Colors.green.withValues(alpha: 0.3)
-                          : Colors.red.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Text(
-                    isPassed ? "Passed" : "Failed",
-                    style: TextStyle(
-                      color: isPassed ? Colors.green : Colors.red,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
+            // ── Header strip ────────────────────────────────
+            Container(
+              width: double.infinity,
+              height: 4,
+              color: statusColor.withValues(alpha: 0.6),
             ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStatItem(
-                  "Score",
-                  "${percentage.toInt()}%",
-                  isPassed ? Colors.green : Colors.red,
-                ),
-                Container(width: 1, height: 40, color: Colors.grey[300]),
-                _buildStatItem(
-                  "Correct",
-                  "$totalCorrect/$totalQuestions",
-                  Colors.blue,
-                ),
-                Container(width: 1, height: 40, color: Colors.grey[300]),
-                _buildStatItem(
-                  "Marks",
-                  "${earnedMarks.toInt()}/${totalMarks.toInt()}",
-                  Colors.orange,
-                ),
-              ],
+
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title + status pill
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          quizTitle,
+                          style: AppTheme.cardTitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: statusColor.withValues(alpha: 0.25),
+                          ),
+                        ),
+                        child: Text(
+                          isPassed ? "Passed" : "Failed",
+                          style: AppTheme.labelSmall.copyWith(
+                            color: statusColor,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+                  AppTheme.cardDivider,
+                  const SizedBox(height: 16),
+
+                  // Stats row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStat(
+                          "Score",
+                          "${percentage.toInt()}%",
+                          statusColor,
+                        ),
+                      ),
+                      Container(width: 1, height: 36, color: AppTheme.divider),
+                      Expanded(
+                        child: _buildStat(
+                          "Correct",
+                          "$totalCorrect / $totalQuestions",
+                          AppTheme.primary,
+                        ),
+                      ),
+                      Container(width: 1, height: 36, color: AppTheme.divider),
+                      Expanded(
+                        child: _buildStat(
+                          "Marks",
+                          "${earnedMarks.toInt()} / ${totalMarks.toInt()}",
+                          AppTheme.inProgress,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -172,19 +185,15 @@ class _QuizAttemptsPageState extends State<QuizAttemptsPage> {
     );
   }
 
-  Widget _buildStatItem(String label, String value, Color color) {
+  Widget _buildStat(String label, String value, Color color) {
     return Column(
       children: [
         Text(
           value,
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
+          style: AppTheme.statCount.copyWith(fontSize: 20, color: color),
         ),
-        const SizedBox(height: 4),
-        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+        const SizedBox(height: 3),
+        Text(label, style: AppTheme.labelSmall),
       ],
     );
   }

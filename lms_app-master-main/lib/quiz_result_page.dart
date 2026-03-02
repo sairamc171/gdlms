@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'app_theme.dart';
 import 'lesson_player_page.dart';
 import 'quiz_intro_page.dart';
 import 'services/api_service.dart';
@@ -27,8 +28,7 @@ class QuizResultPage extends StatefulWidget {
 class _QuizResultPageState extends State<QuizResultPage>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _scoreAnim;
-  late Animation<double> _fadeAnim;
+  late Animation<double> _scoreAnim, _fadeAnim;
   late Animation<Offset> _slideAnim;
 
   @override
@@ -62,7 +62,6 @@ class _QuizResultPageState extends State<QuizResultPage>
     super.dispose();
   }
 
-  // ── Derive prev/next from allLessonIds ──────────────────────────────────
   int? get _previousId {
     if (widget.allLessonIds.isEmpty || widget.currentQuizId == 0) return null;
     final idx = widget.allLessonIds.indexOf(widget.currentQuizId);
@@ -73,9 +72,8 @@ class _QuizResultPageState extends State<QuizResultPage>
   int? get _nextId {
     if (widget.allLessonIds.isEmpty || widget.currentQuizId == 0) return null;
     final idx = widget.allLessonIds.indexOf(widget.currentQuizId);
-    if (idx >= 0 && idx < widget.allLessonIds.length - 1) {
+    if (idx >= 0 && idx < widget.allLessonIds.length - 1)
       return widget.allLessonIds[idx + 1];
-    }
     return null;
   }
 
@@ -83,7 +81,6 @@ class _QuizResultPageState extends State<QuizResultPage>
     if (!mounted) return;
     final data = await apiService.getLessonDetails(id);
     if (!mounted || data == null) return;
-
     if (data['type'] == 'quiz') {
       Navigator.pushReplacement(
         context,
@@ -123,23 +120,12 @@ class _QuizResultPageState extends State<QuizResultPage>
         : 0;
     final bool isPassed = percent >= 0.7;
     final int percentInt = (percent * 100).toInt();
-
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        centerTitle: true,
-        title: const Text(
-          "Results",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-      ),
+      backgroundColor: AppTheme.background,
+      appBar: AppTheme.buildAppBar(title: "Results"),
       body: SafeArea(
         child: isLandscape
             ? _buildLandscapeBody(percent, isPassed, percentInt)
@@ -148,42 +134,35 @@ class _QuizResultPageState extends State<QuizResultPage>
     );
   }
 
-  // ── Portrait ─────────────────────────────────────────────────────────────
   Widget _buildPortraitBody(double percent, bool isPassed, int percentInt) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
       child: Column(
         children: [
-          const SizedBox(height: 16),
           _scoreRing(percent, isPassed, percentInt, size: 180),
           const SizedBox(height: 32),
           FadeTransition(
             opacity: _fadeAnim,
             child: SlideTransition(
               position: _slideAnim,
-              child: _statsRow(isPassed),
+              child: Column(
+                children: [
+                  _statsRow(isPassed),
+                  const SizedBox(height: 32),
+                  _buttons(isPassed),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 40),
-          FadeTransition(
-            opacity: _fadeAnim,
-            child: SlideTransition(
-              position: _slideAnim,
-              child: _buttons(isPassed),
-            ),
-          ),
-          const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  // ── Landscape: ring on left, stats + buttons on right ────────────────────
   Widget _buildLandscapeBody(double percent, bool isPassed, int percentInt) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Left: score ring — centred vertically
         Expanded(
           flex: 4,
           child: Padding(
@@ -193,7 +172,6 @@ class _QuizResultPageState extends State<QuizResultPage>
             ),
           ),
         ),
-        // Right: stats + buttons — independently scrollable
         Expanded(
           flex: 6,
           child: LayoutBuilder(
@@ -229,190 +207,179 @@ class _QuizResultPageState extends State<QuizResultPage>
     int percentInt, {
     required double size,
   }) {
+    final color = isPassed ? AppTheme.completed : Colors.red[700]!;
     return AnimatedBuilder(
       animation: _scoreAnim,
-      builder: (context, _) {
-        return SizedBox(
-          width: size,
-          height: size,
-          child: CustomPaint(
-            painter: _ScoreRingPainter(
-              progress: _scoreAnim.value * percent,
-              isPassed: isPassed,
-            ),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    "${(_scoreAnim.value * percentInt).toInt()}%",
-                    style: TextStyle(
-                      fontSize: size * 0.22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
+      builder: (context, _) => SizedBox(
+        width: size,
+        height: size,
+        child: CustomPaint(
+          painter: _ScoreRingPainter(
+            progress: _scoreAnim.value * percent,
+            isPassed: isPassed,
+          ),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "${(_scoreAnim.value * percentInt).toInt()}%",
+                  style: AppTheme.headingLarge.copyWith(
+                    fontSize: size * 0.22,
+                    color: AppTheme.textPrimary,
                   ),
-                  Text(
-                    isPassed ? "Passed" : "Failed",
-                    style: TextStyle(
-                      fontSize: size * 0.08,
-                      fontWeight: FontWeight.w600,
-                      color: isPassed
-                          ? const Color(0xFF2E7D32)
-                          : const Color(0xFFC62828),
-                      letterSpacing: 0.5,
-                    ),
+                ),
+                Text(
+                  isPassed ? "Passed" : "Failed",
+                  style: AppTheme.labelSmall.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
   Widget _statsRow(bool isPassed) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
           child: _StatCard(
             label: "Correct",
             value: "${widget.correctAnswers}",
-            icon: Icons.check_circle_outline_rounded,
-            color: const Color(0xFF2E7D32),
+            color: AppTheme.completed,
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         Expanded(
           child: _StatCard(
             label: "Wrong",
             value: "${widget.totalQuestions - widget.correctAnswers}",
-            icon: Icons.cancel_outlined,
-            color: const Color(0xFFC62828),
+            color: Colors.red[700]!,
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         Expanded(
           child: _StatCard(
             label: "Total",
             value: "${widget.totalQuestions}",
-            icon: Icons.list_alt_rounded,
-            color: const Color(0xFF6D391E),
+            color: AppTheme.primary,
           ),
         ),
       ],
     );
   }
 
-  Widget _buttons(bool isPassed, {double buttonHeight = 56}) {
+  Widget _buttons(bool isPassed, {double buttonHeight = 52}) {
     final hasPrev = _previousId != null;
     final hasNext = _nextId != null;
-    final primaryBrown = const Color(0xFF6D391E);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ── Retry (only if failed) ──────────────────────────────────────
         if (!isPassed) ...[
           ElevatedButton.icon(
             icon: const Icon(
               Icons.replay_rounded,
-              color: Colors.white,
+              color: AppTheme.surface,
               size: 20,
             ),
             label: Text(
               "Retry Quiz",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: buttonHeight < 56 ? 14 : 16,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
+              style: AppTheme.bodyMedium.copyWith(
+                color: AppTheme.surface,
+                fontWeight: FontWeight.w600,
               ),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: primaryBrown,
+              backgroundColor: AppTheme.primary,
               minimumSize: Size(double.infinity, buttonHeight),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
               ),
               elevation: 0,
             ),
             onPressed: () => Navigator.pop(context, 'retake'),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
         ],
-
-        // ── Back to Lesson ───────────────────────────────────────────────
         OutlinedButton.icon(
           icon: const Icon(
             Icons.arrow_back_rounded,
-            color: Color(0xFF6D391E),
+            color: AppTheme.primary,
             size: 20,
           ),
           label: Text(
             "Back to Lesson",
-            style: TextStyle(
-              color: primaryBrown,
-              fontSize: buttonHeight < 56 ? 14 : 16,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
+            style: AppTheme.bodyMedium.copyWith(
+              color: AppTheme.primary,
+              fontWeight: FontWeight.w600,
             ),
           ),
           style: OutlinedButton.styleFrom(
             minimumSize: Size(double.infinity, buttonHeight),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
             ),
-            side: BorderSide(color: primaryBrown, width: 1.5),
+            side: const BorderSide(color: AppTheme.primary, width: 1.5),
           ),
           onPressed: _goToLessonPlayer,
         ),
-
-        const SizedBox(height: 12),
-
-        // ── Prev / Next ──────────────────────────────────────────────────
+        const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: hasPrev ? () => _navigateTo(_previousId!) : null,
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 14),
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 13),
                 label: Text(
-                  'Previous',
-                  style: TextStyle(fontSize: buttonHeight < 56 ? 13 : 15),
+                  "Previous",
+                  style: AppTheme.labelMedium.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: hasPrev ? AppTheme.primary : Colors.grey[350],
+                  ),
                 ),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: primaryBrown,
-                  disabledForegroundColor: Colors.grey.shade400,
+                  foregroundColor: AppTheme.primary,
+                  disabledForegroundColor: Colors.grey[350],
                   side: BorderSide(
-                    color: hasPrev ? primaryBrown : Colors.grey.shade300,
+                    color: hasPrev
+                        ? AppTheme.primary.withValues(alpha: 0.5)
+                        : Colors.grey[200]!,
                   ),
-                  minimumSize: Size(0, buttonHeight < 56 ? 42 : 48),
+                  minimumSize: Size(0, buttonHeight < 52 ? 40 : 46),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: hasNext ? () => _navigateTo(_nextId!) : null,
-                icon: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
-                label: Text(
-                  'Next',
-                  style: TextStyle(fontSize: buttonHeight < 56 ? 13 : 15),
-                ),
+                icon: const Icon(Icons.arrow_forward_ios_rounded, size: 13),
                 iconAlignment: IconAlignment.end,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: primaryBrown,
-                  disabledForegroundColor: Colors.grey.shade400,
-                  side: BorderSide(
-                    color: hasNext ? primaryBrown : Colors.grey.shade300,
+                label: Text(
+                  "Next",
+                  style: AppTheme.labelMedium.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: hasNext ? AppTheme.primary : Colors.grey[350],
                   ),
-                  minimumSize: Size(0, buttonHeight < 56 ? 42 : 48),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.primary,
+                  disabledForegroundColor: Colors.grey[350],
+                  side: BorderSide(
+                    color: hasNext
+                        ? AppTheme.primary.withValues(alpha: 0.5)
+                        : Colors.grey[200]!,
+                  ),
+                  minimumSize: Size(0, buttonHeight < 52 ? 40 : 46),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -427,86 +394,62 @@ class _QuizResultPageState extends State<QuizResultPage>
 }
 
 class _StatCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
+  final String label, value;
   final Color color;
-
   const _StatCard({
     required this.label,
     required this.value,
-    required this.icon,
     required this.color,
   });
-
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 22),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.black54,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.07),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: color.withValues(alpha: 0.18)),
+    ),
+    child: Column(
+      children: [
+        Text(
+          value,
+          style: AppTheme.statCount.copyWith(fontSize: 22, color: color),
+        ),
+        const SizedBox(height: 4),
+        Text(label, style: AppTheme.labelSmall),
+      ],
+    ),
+  );
 }
 
 class _ScoreRingPainter extends CustomPainter {
   final double progress;
   final bool isPassed;
-
   _ScoreRingPainter({required this.progress, required this.isPassed});
-
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = (size.width - 20) / 2;
     const strokeWidth = 12.0;
-
-    final bgPaint = Paint()
-      ..color = Colors.grey.shade200
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawCircle(center, radius, bgPaint);
-
-    final progressPaint = Paint()
-      ..color = isPassed ? const Color(0xFF2E7D32) : const Color(0xFFC62828)
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = Colors.grey.shade200
+        ..strokeWidth = strokeWidth
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round,
+    );
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
       -math.pi / 2,
       2 * math.pi * progress,
       false,
-      progressPaint,
+      Paint()
+        ..color = isPassed ? AppTheme.completed : Colors.red[700]!
+        ..strokeWidth = strokeWidth
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round,
     );
   }
 

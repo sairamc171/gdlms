@@ -1,273 +1,238 @@
 import 'package:flutter/material.dart';
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  AppTheme — single source of truth for all design tokens.
-//  Add to pubspec.yaml fonts section:
-//    - family: Poppins
-//      fonts:
-//        - asset: fonts/Poppins-Regular.ttf
-//        - asset: fonts/Poppins-Medium.ttf   weight: 500
-//        - asset: fonts/Poppins-SemiBold.ttf weight: 600
-//        - asset: fonts/Poppins-Bold.ttf     weight: 700
-//        - asset: fonts/Poppins-ExtraBold.ttf weight: 800
-// ─────────────────────────────────────────────────────────────────────────────
+import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   AppTheme._();
 
-  // ── Brand Colours ────────────────────────────────────────────────────────
-  static const Color primary = Color(0xFF7A2E1A); // rich brand brown
-  static const Color primaryDark = Color(0xFF5C2010); // deeper (shadow/press)
-  static const Color primaryLight = Color(0xFFEDD8CF); // tinted highlight
-  static const Color background = Color(0xFFE8E0D5); // warm beige (page bg)
-  static const Color surface = Color(0xFFF0EBE5); // card bg on beige
-  static const Color cardBg = Colors.white;
-  static const Color border = Color(0xFFDDD5CC);
-  static const Color textPrimary = Color(0xFF3B1A10);
-  static const Color textSecondary = Color(0xFF7A6A62);
-  static const Color textMuted = Color(0xFFAA9F99);
-  static const Color success = Color(0xFF3D9970);
-  static const Color warning = Color(0xFFE8A838);
-  static const Color errorColor = Color(0xFFCC3333);
+  // ── Colors ────────────────────────────────────────────────────────────────
+  static const Color primary = Color(0xFF4B2313); // deep brown
+  static const Color primaryLight = Color(0xFF6D391E); // lighter brown
+  static const Color completed = Color(0xFF2E7D5E); // muted green
+  static const Color completedLight = Color(0xFF22C372); // bright green
+  static const Color inProgress = Color(0xFFB05A1A); // warm orange-brown
+  static const Color background = Color(0xFFF7F4F2); // warm off-white
+  static const Color surface = Colors.white;
+  static const Color divider = Color(0x0D000000); // black @ 5%
+  static const Color textPrimary = Color(0xDD000000); // black87
+  static const Color textSecondary = Color(0x8A000000); // black54
+  static const Color textHint = Color(0x61000000); // black38
+  static const Color placeholder = Color(0xFFEDE8E5);
+  static const Color cardShadow = Color(0x0E000000); // black @ ~5.5%
 
-  // ── Font ─────────────────────────────────────────────────────────────────
-  static const String fontFamily = 'Poppins';
+  // ── Typography ────────────────────────────────────────────────────────────
 
-  // ── Text Styles ──────────────────────────────────────────────────────────
-  static const TextStyle display = TextStyle(
-    fontFamily: fontFamily,
-    fontSize: 34,
-    fontWeight: FontWeight.w800,
-    color: primary,
-    height: 1.15,
-    letterSpacing: -0.5,
-  );
-  static const TextStyle heading1 = TextStyle(
-    fontFamily: fontFamily,
-    fontSize: 22,
+  // Display — large hero numbers / headings
+  static TextStyle get displayLarge => GoogleFonts.poppins(
+    fontSize: 42,
     fontWeight: FontWeight.w700,
+    color: surface,
+    height: 1.0,
+    letterSpacing: -1.0,
+  );
+
+  // Page title (AppBar)
+  static TextStyle get appBarTitle => GoogleFonts.poppins(
+    fontSize: 19,
+    fontWeight: FontWeight.w600,
     color: textPrimary,
     letterSpacing: -0.2,
-    height: 1.3,
   );
-  static const TextStyle heading2 = TextStyle(
-    fontFamily: fontFamily,
-    fontSize: 17,
+
+  // Section / screen heading
+  static TextStyle get headingLarge => GoogleFonts.poppins(
+    fontSize: 26,
     fontWeight: FontWeight.w700,
     color: textPrimary,
+    letterSpacing: -0.5,
+    height: 1.2,
+  );
+
+  static TextStyle get headingMedium => GoogleFonts.poppins(
+    fontSize: 19,
+    fontWeight: FontWeight.w700,
+    color: textPrimary,
+    letterSpacing: -0.3,
+  );
+
+  // Card title
+  static TextStyle get cardTitle => GoogleFonts.poppins(
+    fontSize: 14.5,
+    fontWeight: FontWeight.w600,
+    color: textPrimary,
+    height: 1.4,
     letterSpacing: -0.1,
   );
-  static const TextStyle heading3 = TextStyle(
-    fontFamily: fontFamily,
-    fontSize: 14,
+
+  // Overline / section label (e.g. "IN PROGRESS")
+  static TextStyle get overline => GoogleFonts.poppins(
+    fontSize: 11,
     fontWeight: FontWeight.w600,
-    color: primary,
+    color: textHint,
+    letterSpacing: 1.6,
   );
-  static const TextStyle body = TextStyle(
-    fontFamily: fontFamily,
+
+  // Body text
+  static TextStyle get bodyMedium => GoogleFonts.poppins(
     fontSize: 14,
     fontWeight: FontWeight.w400,
     color: textPrimary,
-    height: 1.55,
   );
-  static const TextStyle bodyMedium = TextStyle(
-    fontFamily: fontFamily,
-    fontSize: 14,
-    fontWeight: FontWeight.w500,
-    color: textPrimary,
-    height: 1.55,
-  );
-  static const TextStyle bodySmall = TextStyle(
-    fontFamily: fontFamily,
+
+  static TextStyle get bodySmall => GoogleFonts.poppins(
     fontSize: 12,
     fontWeight: FontWeight.w400,
     color: textSecondary,
-    height: 1.4,
   );
-  static const TextStyle label = TextStyle(
-    fontFamily: fontFamily,
-    fontSize: 11,
-    fontWeight: FontWeight.w600,
-    color: textMuted,
-    letterSpacing: 0.7,
+
+  // Label / caption
+  static TextStyle get labelMedium => GoogleFonts.poppins(
+    fontSize: 13,
+    fontWeight: FontWeight.w500,
+    color: textSecondary,
   );
-  static const TextStyle caption = TextStyle(
-    fontFamily: fontFamily,
-    fontSize: 10,
-    color: textMuted,
+
+  static TextStyle get labelSmall => GoogleFonts.poppins(
+    fontSize: 11.5,
+    fontWeight: FontWeight.w400,
+    color: textHint,
   );
-  static const TextStyle buttonText = TextStyle(
-    fontFamily: fontFamily,
-    fontSize: 16,
+
+  // Stat count on secondary cards
+  static TextStyle get statCount => GoogleFonts.poppins(
+    fontSize: 32,
     fontWeight: FontWeight.w700,
-    color: Colors.white,
-    letterSpacing: 0.3,
+    color: textPrimary,
+    height: 1.0,
+    letterSpacing: -0.8,
   );
 
-  // ── Radii ─────────────────────────────────────────────────────────────────
-  static const double radiusSm = 10;
-  static const double radiusMd = 16;
-  static const double radiusLg = 20;
-  static const double radiusPill = 50;
+  // Bottom nav labels
+  static TextStyle get navLabelSelected =>
+      GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600);
 
-  // ── Shadows ───────────────────────────────────────────────────────────────
-  static List<BoxShadow> get cardShadow => [
-    BoxShadow(
-      color: primary.withOpacity(0.08),
-      blurRadius: 12,
-      offset: const Offset(0, 4),
-    ),
-  ];
-  static List<BoxShadow> get buttonShadow => [
-    BoxShadow(
-      color: primaryDark.withOpacity(0.35),
-      blurRadius: 16,
-      offset: const Offset(0, 6),
-    ),
-  ];
-  static List<BoxShadow> get inputShadow => [
-    BoxShadow(
-      color: Colors.black.withOpacity(0.06),
-      blurRadius: 8,
-      offset: const Offset(0, 2),
-    ),
-  ];
+  static TextStyle get navLabelUnselected =>
+      GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w400);
 
-  // ── Decorations ───────────────────────────────────────────────────────────
-  static BoxDecoration cardDecoration({Color? bg}) => BoxDecoration(
-    color: bg ?? cardBg,
-    borderRadius: BorderRadius.circular(radiusMd),
-    border: Border.all(color: border),
-    boxShadow: cardShadow,
+  // Progress label ("Done" / "74%")
+  static TextStyle get progressLabel => GoogleFonts.poppins(
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    color: textSecondary,
   );
 
-  // ── Button Styles ─────────────────────────────────────────────────────────
-  static final ButtonStyle primaryButtonStyle = ElevatedButton.styleFrom(
-    backgroundColor: primary,
-    foregroundColor: Colors.white,
-    elevation: 0,
-    padding: const EdgeInsets.symmetric(vertical: 16),
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(radiusPill),
-    ),
-    textStyle: buttonText,
+  // Welcome sub-label ("Welcome back,")
+  static TextStyle get welcomeSub => GoogleFonts.poppins(
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    color: textHint,
   );
 
-  static final ButtonStyle outlineButtonStyle = OutlinedButton.styleFrom(
-    foregroundColor: primary,
-    side: const BorderSide(color: primary, width: 1.5),
-    padding: const EdgeInsets.symmetric(vertical: 14),
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(radiusPill),
-    ),
+  // ── Decoration helpers ────────────────────────────────────────────────────
+
+  /// Standard white card with soft shadow
+  static BoxDecoration get cardDecoration => BoxDecoration(
+    color: surface,
+    borderRadius: BorderRadius.circular(20),
+    boxShadow: [
+      BoxShadow(color: cardShadow, blurRadius: 24, offset: const Offset(0, 6)),
+    ],
   );
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Shared Widgets
-// ─────────────────────────────────────────────────────────────────────────────
+  /// Primary (brown) hero card — e.g. enrolled count
+  static BoxDecoration get primaryCardDecoration =>
+      BoxDecoration(color: primary, borderRadius: BorderRadius.circular(18));
 
-class AppDivider extends StatelessWidget {
-  const AppDivider({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const Divider(height: 1, thickness: 1, color: AppTheme.border);
-}
+  /// Subtle section pill (count badge on section labels)
+  static BoxDecoration get sectionPillDecoration => BoxDecoration(
+    color: const Color(0x0F000000),
+    borderRadius: BorderRadius.circular(20),
+  );
 
-class SectionHeader extends StatelessWidget {
-  final String title;
-  const SectionHeader(this.title, {super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 28, 20, 14),
-      child: Row(
-        children: [
-          Text(title, style: AppTheme.heading2),
-          const SizedBox(width: 10),
-          Expanded(child: Container(height: 1, color: AppTheme.border)),
-        ],
+  // ── AppBar ────────────────────────────────────────────────────────────────
+
+  static AppBar buildAppBar({
+    required String title,
+    List<Widget>? actions,
+    bool showBack = true,
+    Color foreground = primary,
+  }) {
+    return AppBar(
+      title: Text(title, style: appBarTitle),
+      centerTitle: true,
+      backgroundColor: surface,
+      elevation: 0,
+      surfaceTintColor: Colors.transparent,
+      foregroundColor: foreground,
+      actions: actions,
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(height: 1, color: divider),
       ),
     );
   }
-}
 
-class AppBadge extends StatelessWidget {
-  final String text;
-  const AppBadge(this.text, {super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppTheme.primaryLight,
-        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-      ),
-      child: Text(
-        text.toUpperCase(),
-        style: AppTheme.label.copyWith(color: AppTheme.primary),
-      ),
-    );
-  }
-}
+  // ── Progress bar ──────────────────────────────────────────────────────────
 
-class StarRow extends StatelessWidget {
-  final double rating;
-  final double size;
-  const StarRow({super.key, required this.rating, this.size = 16});
-  @override
-  Widget build(BuildContext context) {
+  static Widget buildProgressBar(double progress, {bool isCompleted = false}) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(
-        5,
-        (i) => Icon(
-          i < rating.floor() ? Icons.star_rounded : Icons.star_outline_rounded,
-          color: AppTheme.warning,
-          size: size,
+      children: [
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress / 100,
+              backgroundColor: const Color(0x0F000000),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isCompleted ? completed : primary,
+              ),
+              minHeight: 3,
+            ),
+          ),
         ),
-      ),
+        const SizedBox(width: 14),
+        Text(
+          isCompleted ? "Done" : "${progress.toInt()}%",
+          style: progressLabel.copyWith(
+            color: isCompleted ? completed : textSecondary,
+          ),
+        ),
+      ],
     );
   }
-}
 
-/// Pill primary button with drop shadow (matches login "Sign In" button)
-class PrimaryButton extends StatelessWidget {
-  final String label;
-  final VoidCallback? onPressed;
-  final bool isLoading;
-  const PrimaryButton({
-    super.key,
-    required this.label,
-    this.onPressed,
-    this.isLoading = false,
-  });
+  // ── Divider ───────────────────────────────────────────────────────────────
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-        boxShadow: AppTheme.buttonShadow,
-      ),
-      child: SizedBox(
-        width: double.infinity,
-        height: 54,
-        child: ElevatedButton(
-          style: AppTheme.primaryButtonStyle,
-          onPressed: isLoading ? null : onPressed,
-          child: isLoading
-              ? const SizedBox(
-                  height: 22,
-                  width: 22,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2.5,
-                  ),
-                )
-              : Text(label, style: AppTheme.buttonText),
-        ),
-      ),
-    );
-  }
+  static Widget get cardDivider =>
+      Divider(height: 1, thickness: 1, color: divider);
+
+  // ── Full MaterialTheme ────────────────────────────────────────────────────
+
+  static ThemeData get themeData => ThemeData(
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: primary,
+      surface: surface,
+      background: background,
+    ),
+    scaffoldBackgroundColor: background,
+    textTheme: GoogleFonts.poppinsTextTheme(),
+    appBarTheme: AppBarTheme(
+      backgroundColor: surface,
+      elevation: 0,
+      surfaceTintColor: Colors.transparent,
+      centerTitle: true,
+      titleTextStyle: appBarTitle,
+      foregroundColor: primary,
+    ),
+    bottomNavigationBarTheme: BottomNavigationBarThemeData(
+      backgroundColor: surface,
+      selectedItemColor: primary,
+      unselectedItemColor: const Color(0xFF9E9E9E),
+      elevation: 0,
+      selectedLabelStyle: navLabelSelected,
+      unselectedLabelStyle: navLabelUnselected,
+    ),
+    dividerColor: divider,
+    progressIndicatorTheme: const ProgressIndicatorThemeData(color: primary),
+    useMaterial3: true,
+  );
 }

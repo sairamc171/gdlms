@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'app_theme.dart';
 import '../services/api_service.dart';
 import 'quiz_taking_page.dart';
 import 'quiz_result_page.dart' as results;
-import 'course_details_page.dart'; // for courseRouteObserver
+import 'course_details_page.dart';
 
 class QuizIntroPage extends StatefulWidget {
   final int quizId;
@@ -67,7 +68,6 @@ class _QuizIntroPageState extends State<QuizIntroPage>
         return ['finished', 'passed', 'failed'].contains(status) &&
             _parseDouble(a['total_marks']) > 0;
       }).toList();
-
       if (!mounted) return;
       if (completed.isNotEmpty) {
         final latest = completed.first;
@@ -97,20 +97,21 @@ class _QuizIntroPageState extends State<QuizIntroPage>
   }
 
   void _showResults() {
-    final route = MaterialPageRoute(
-      builder: (c) => results.QuizResultPage(
-        totalQuestions: _parseInt(_latestAttempt!['total_questions']),
-        correctAnswers: _parseInt(_latestAttempt!['total_correct']),
-        allLessonIds: widget.allLessonIds,
-        currentQuizId: widget.quizId,
-        onBackToLesson: () {
-          // Pop result page + intro page → lands on lesson player
-          int count = 0;
-          Navigator.of(context).popUntil((_) => count++ >= 2);
-        },
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (c) => results.QuizResultPage(
+          totalQuestions: _parseInt(_latestAttempt!['total_questions']),
+          correctAnswers: _parseInt(_latestAttempt!['total_correct']),
+          allLessonIds: widget.allLessonIds,
+          currentQuizId: widget.quizId,
+          onBackToLesson: () {
+            int count = 0;
+            Navigator.of(context).popUntil((_) => count++ >= 2);
+          },
+        ),
       ),
-    );
-    Navigator.push(context, route).then((res) {
+    ).then((res) {
       if (res == 'retake') {
         _startQuiz();
       } else {
@@ -136,8 +137,8 @@ class _QuizIntroPageState extends State<QuizIntroPage>
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(child: CircularProgressIndicator()),
+        backgroundColor: AppTheme.background,
+        body: Center(child: CircularProgressIndicator(color: AppTheme.primary)),
       );
     }
 
@@ -146,22 +147,12 @@ class _QuizIntroPageState extends State<QuizIntroPage>
                   _parseDouble(_latestAttempt!['total_marks'])) *
               100
         : null;
-
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
-        centerTitle: true,
-        title: Text(
-          widget.quizTitle,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-      ),
+      backgroundColor: AppTheme.background,
+      appBar: AppTheme.buildAppBar(title: widget.quizTitle),
       body: FadeTransition(
         opacity: _fadeAnim,
         child: SlideTransition(
@@ -178,22 +169,20 @@ class _QuizIntroPageState extends State<QuizIntroPage>
 
   Widget _buildPortraitBody(double? scorePercent) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+      padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 20),
           _heroIcon(),
-          const SizedBox(height: 32),
+          const SizedBox(height: 28),
           _titleText(),
           const SizedBox(height: 12),
           if (_hasPreviousAttempt && scorePercent != null) ...[
             _scoreChip(scorePercent),
             const SizedBox(height: 8),
           ],
-          const SizedBox(height: 40),
+          const SizedBox(height: 36),
           _buttons(),
-          const SizedBox(height: 16),
         ],
       ),
     );
@@ -212,20 +201,10 @@ class _QuizIntroPageState extends State<QuizIntroPage>
               child: Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6D391E).withOpacity(0.08),
+                  color: AppTheme.primary.withValues(alpha: 0.07),
                   borderRadius: BorderRadius.circular(24),
                 ),
-                child: Center(
-                  child: Icon(
-                    _isPassed
-                        ? Icons.workspace_premium_rounded
-                        : (_hasPreviousAttempt
-                              ? Icons.refresh_rounded
-                              : Icons.quiz_rounded),
-                    size: 64,
-                    color: const Color(0xFF6D391E),
-                  ),
-                ),
+                child: Center(child: _heroIconWidget(size: 64)),
               ),
             ),
           ),
@@ -242,7 +221,6 @@ class _QuizIntroPageState extends State<QuizIntroPage>
                 ],
                 const SizedBox(height: 16),
                 _buttons(buttonHeight: 48),
-                const SizedBox(height: 8),
               ],
             ),
           ),
@@ -251,74 +229,59 @@ class _QuizIntroPageState extends State<QuizIntroPage>
     );
   }
 
-  Widget _heroIcon() {
-    return Container(
-      height: 140,
-      decoration: BoxDecoration(
-        color: const Color(0xFF6D391E).withOpacity(0.08),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Center(
-        child: Icon(
-          _isPassed
-              ? Icons.workspace_premium_rounded
-              : (_hasPreviousAttempt
-                    ? Icons.refresh_rounded
-                    : Icons.quiz_rounded),
-          size: 64,
-          color: const Color(0xFF6D391E),
-        ),
-      ),
+  Widget _heroIconWidget({double size = 64}) {
+    return Icon(
+      _isPassed
+          ? Icons.workspace_premium_rounded
+          : (_hasPreviousAttempt ? Icons.refresh_rounded : Icons.quiz_rounded),
+      size: size,
+      color: AppTheme.primary,
     );
   }
 
-  Widget _titleText({double fontSize = 24}) {
+  Widget _heroIcon() {
+    return Container(
+      height: 130,
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Center(child: _heroIconWidget()),
+    );
+  }
+
+  Widget _titleText({double fontSize = 22}) {
     return Text(
       widget.quizTitle,
-      style: TextStyle(
-        fontSize: fontSize,
-        fontWeight: FontWeight.bold,
-        color: Colors.black87,
-        height: 1.3,
-      ),
+      style: AppTheme.headingMedium.copyWith(fontSize: fontSize),
       textAlign: TextAlign.center,
     );
   }
 
   Widget _scoreChip(double scorePercent) {
+    final color = _isPassed ? AppTheme.completed : Colors.red[700]!;
     return Center(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: _isPassed
-              ? const Color(0xFF2E7D32).withOpacity(0.1)
-              : const Color(0xFFC62828).withOpacity(0.1),
+          color: color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(
-            color: _isPassed
-                ? const Color(0xFF2E7D32).withOpacity(0.4)
-                : const Color(0xFFC62828).withOpacity(0.4),
-          ),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               _isPassed ? Icons.check_circle_outline : Icons.cancel_outlined,
-              size: 16,
-              color: _isPassed
-                  ? const Color(0xFF2E7D32)
-                  : const Color(0xFFC62828),
+              size: 15,
+              color: color,
             ),
             const SizedBox(width: 6),
             Text(
               "Last score: ${scorePercent.toInt()}%",
-              style: TextStyle(
-                fontSize: 13,
+              style: AppTheme.labelMedium.copyWith(
+                color: color,
                 fontWeight: FontWeight.w600,
-                color: _isPassed
-                    ? const Color(0xFF2E7D32)
-                    : const Color(0xFFC62828),
               ),
             ),
           ],
@@ -327,19 +290,19 @@ class _QuizIntroPageState extends State<QuizIntroPage>
     );
   }
 
-  Widget _buttons({double buttonHeight = 56}) {
+  Widget _buttons({double buttonHeight = 52}) {
     if (_isPassed) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _OutlineButton(
+          _OutlineBtn(
             label: "View Results",
             icon: Icons.bar_chart_rounded,
             height: buttonHeight,
             onPressed: _showResults,
           ),
           const SizedBox(height: 12),
-          _PrimaryButton(
+          _PrimaryBtn(
             label: "Retake Quiz",
             icon: Icons.replay_rounded,
             height: buttonHeight,
@@ -348,7 +311,7 @@ class _QuizIntroPageState extends State<QuizIntroPage>
         ],
       );
     }
-    return _PrimaryButton(
+    return _PrimaryBtn(
       label: _hasPreviousAttempt ? "Try Again" : "Start Quiz",
       icon: _hasPreviousAttempt
           ? Icons.replay_rounded
@@ -362,73 +325,63 @@ class _QuizIntroPageState extends State<QuizIntroPage>
   int _parseInt(dynamic v) => int.tryParse(v?.toString() ?? '0') ?? 0;
 }
 
-class _PrimaryButton extends StatelessWidget {
+class _PrimaryBtn extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback onPressed;
   final double height;
-  const _PrimaryButton({
+  const _PrimaryBtn({
     required this.label,
     required this.icon,
     required this.onPressed,
-    this.height = 56,
+    this.height = 52,
   });
-
   @override
-  Widget build(BuildContext context) {
-    return ElevatedButton.icon(
-      icon: Icon(icon, color: Colors.white, size: 20),
-      label: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.5,
-        ),
+  Widget build(BuildContext context) => ElevatedButton.icon(
+    icon: Icon(icon, color: AppTheme.surface, size: 20),
+    label: Text(
+      label,
+      style: AppTheme.bodyMedium.copyWith(
+        color: AppTheme.surface,
+        fontWeight: FontWeight.w600,
       ),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF6D391E),
-        minimumSize: Size(double.infinity, height),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 0,
-      ),
-      onPressed: onPressed,
-    );
-  }
+    ),
+    style: ElevatedButton.styleFrom(
+      backgroundColor: AppTheme.primary,
+      minimumSize: Size(double.infinity, height),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      elevation: 0,
+    ),
+    onPressed: onPressed,
+  );
 }
 
-class _OutlineButton extends StatelessWidget {
+class _OutlineBtn extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback onPressed;
   final double height;
-  const _OutlineButton({
+  const _OutlineBtn({
     required this.label,
     required this.icon,
     required this.onPressed,
-    this.height = 56,
+    this.height = 52,
   });
-
   @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      icon: Icon(icon, color: const Color(0xFF6D391E), size: 20),
-      label: Text(
-        label,
-        style: const TextStyle(
-          color: Color(0xFF6D391E),
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.5,
-        ),
+  Widget build(BuildContext context) => OutlinedButton.icon(
+    icon: Icon(icon, color: AppTheme.primary, size: 20),
+    label: Text(
+      label,
+      style: AppTheme.bodyMedium.copyWith(
+        color: AppTheme.primary,
+        fontWeight: FontWeight.w600,
       ),
-      style: OutlinedButton.styleFrom(
-        minimumSize: Size(double.infinity, height),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        side: const BorderSide(color: Color(0xFF6D391E), width: 1.5),
-      ),
-      onPressed: onPressed,
-    );
-  }
+    ),
+    style: OutlinedButton.styleFrom(
+      minimumSize: Size(double.infinity, height),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      side: const BorderSide(color: AppTheme.primary, width: 1.5),
+    ),
+    onPressed: onPressed,
+  );
 }

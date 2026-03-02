@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_theme.dart';
 import 'services/api_service.dart';
 import 'models/user_profile.dart';
 import 'main.dart';
@@ -23,11 +24,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _loadProfile() async {
     setState(() => _isLoading = true);
-
-    // Clear image cache so the latest photo always loads fresh
     imageCache.clear();
     imageCache.clearLiveImages();
-
     final data = await apiService.getUserProfile();
     if (data != null && mounted) {
       setState(() {
@@ -44,25 +42,36 @@ class _ProfilePageState extends State<ProfilePage> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
+        title: Text('Logout', style: AppTheme.cardTitle),
+        content: Text(
+          'Are you sure you want to logout?',
+          style: AppTheme.bodySmall,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: AppTheme.labelMedium.copyWith(
+                color: AppTheme.textSecondary,
+              ),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             child: const Text('Logout'),
           ),
         ],
       ),
     );
-
     if (confirm == true && mounted) {
       await apiService.logout();
       Navigator.of(context).pushAndRemoveUntil(
@@ -75,7 +84,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String _formatDate(String dateString) {
     try {
       final date = DateTime.parse(dateString);
-      return DateFormat('MMMM dd, yyyy h:mm a').format(date);
+      return DateFormat('MMMM dd, yyyy  h:mm a').format(date);
     } catch (e) {
       return dateString;
     }
@@ -85,40 +94,40 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(
-          child: CircularProgressIndicator(color: Color(0xFF6D391E)),
-        ),
+        backgroundColor: AppTheme.background,
+        body: Center(child: CircularProgressIndicator(color: AppTheme.primary)),
       );
     }
 
     if (_profile == null) {
       return Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          title: const Text('My Profile'),
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          elevation: 0,
-        ),
+        backgroundColor: AppTheme.background,
+        appBar: AppTheme.buildAppBar(title: 'My Profile'),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 64, color: Colors.grey),
+              Icon(Icons.error_outline, size: 56, color: Colors.grey[300]),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'Failed to load profile',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
+                style: AppTheme.bodyMedium.copyWith(color: Colors.grey[400]),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: _loadProfile,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6D391E),
-                  foregroundColor: Colors.white,
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: AppTheme.surface,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-                child: const Text('Retry'),
+                child: Text(
+                  'Retry',
+                  style: AppTheme.labelMedium.copyWith(color: AppTheme.surface),
+                ),
               ),
             ],
           ),
@@ -127,15 +136,12 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text('My Profile'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
+      backgroundColor: AppTheme.background,
+      appBar: AppTheme.buildAppBar(
+        title: 'My Profile',
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout, color: Colors.red),
+            icon: const Icon(Icons.logout_rounded, color: Colors.red, size: 22),
             onPressed: _handleLogout,
             tooltip: 'Logout',
           ),
@@ -143,16 +149,105 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
       body: RefreshIndicator(
         onRefresh: _loadProfile,
-        color: const Color(0xFF6D391E),
+        color: AppTheme.primary,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             children: [
-              const SizedBox(height: 24),
-              _buildProfileHeader(),
-              const SizedBox(height: 24),
-              _buildInfoCard(),
-              const SizedBox(height: 24),
+              // ── Profile hero ──────────────────────────────────
+              Container(
+                width: double.infinity,
+                color: AppTheme.surface,
+                padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+                child: Column(
+                  children: [
+                    _buildAvatar(),
+                    const SizedBox(height: 16),
+                    Text(
+                      '${_profile!.user.firstName} ${_profile!.user.lastName}'
+                          .trim(),
+                      style: AppTheme.headingMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                    if (_profile!.user.jobTitle.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        _profile!.user.jobTitle,
+                        style: AppTheme.labelMedium,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              Container(height: 1, color: AppTheme.divider),
+
+              // ── Info list ─────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+                child: Container(
+                  decoration: AppTheme.cardDecoration,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: Column(
+                      children: [
+                        _buildInfoRow(
+                          'Registration Date',
+                          _formatDate(_profile!.user.registeredDate),
+                          Icons.calendar_today_outlined,
+                        ),
+                        AppTheme.cardDivider,
+                        _buildInfoRow(
+                          'First Name',
+                          _profile!.user.firstName,
+                          Icons.person_outline,
+                        ),
+                        AppTheme.cardDivider,
+                        _buildInfoRow(
+                          'Last Name',
+                          _profile!.user.lastName,
+                          Icons.person_outline,
+                        ),
+                        AppTheme.cardDivider,
+                        _buildInfoRow(
+                          'Username',
+                          _profile!.user.username,
+                          Icons.account_circle_outlined,
+                        ),
+                        AppTheme.cardDivider,
+                        _buildInfoRow(
+                          'Email',
+                          _profile!.user.email,
+                          Icons.email_outlined,
+                        ),
+                        AppTheme.cardDivider,
+                        _buildInfoRow(
+                          'Phone',
+                          _profile!.user.phone.isEmpty
+                              ? '—'
+                              : _profile!.user.phone,
+                          Icons.phone_outlined,
+                        ),
+                        AppTheme.cardDivider,
+                        _buildInfoRow(
+                          'Occupation',
+                          _profile!.user.jobTitle.isEmpty
+                              ? 'Student'
+                              : _profile!.user.jobTitle,
+                          Icons.work_outline,
+                        ),
+                        AppTheme.cardDivider,
+                        _buildInfoRow(
+                          'Biography',
+                          _profile!.user.bio.isEmpty ? '—' : _profile!.user.bio,
+                          Icons.info_outline,
+                          isMultiline: true,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -160,146 +255,61 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildProfileHeader() {
+  Widget _buildAvatar() {
     final String photoUrl = _profile!.user.profilePhoto;
     final bool hasPhoto = photoUrl.isNotEmpty;
-    // Unique timestamp per load so Flutter cannot serve a cached version
     final String photoUrlWithBust = hasPhoto
         ? '$photoUrl?nocache=${DateTime.now().millisecondsSinceEpoch}'
         : '';
-
     final String initial = _profile!.user.firstName.isNotEmpty
         ? _profile!.user.firstName[0].toUpperCase()
         : _profile!.user.username.isNotEmpty
         ? _profile!.user.username[0].toUpperCase()
         : 'U';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        children: [
-          // Use ClipOval + Image.network for full cache-control header support
-          hasPhoto
-              ? ClipOval(
-                  child: Image.network(
-                    photoUrlWithBust,
-                    width: 120,
-                    height: 120,
-                    fit: BoxFit.cover,
-                    headers: const {
-                      'Cache-Control': 'no-cache, no-store, must-revalidate',
-                      'Pragma': 'no-cache',
-                    },
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Container(
-                        width: 120,
-                        height: 120,
-                        color: Colors.grey[200],
-                        child: const Center(
-                          child: CircularProgressIndicator(
-                            color: Color(0xFF6D391E),
-                            strokeWidth: 2,
-                          ),
-                        ),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) {
-                      return _initialsAvatar(initial, 60);
-                    },
-                  ),
-                )
-              : _initialsAvatar(initial, 60),
-          const SizedBox(height: 16),
-          Text(
-            '${_profile!.user.firstName} ${_profile!.user.lastName}'.trim(),
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          if (_profile!.user.jobTitle.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                _profile!.user.jobTitle,
-                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+    if (hasPhoto) {
+      return ClipOval(
+        child: Image.network(
+          photoUrlWithBust,
+          width: 100,
+          height: 100,
+          fit: BoxFit.cover,
+          headers: const {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+          },
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Container(
+              width: 100,
+              height: 100,
+              color: AppTheme.placeholder,
+              child: const Center(
+                child: CircularProgressIndicator(
+                  color: AppTheme.primary,
+                  strokeWidth: 2,
+                ),
               ),
-            ),
-        ],
-      ),
-    );
+            );
+          },
+          errorBuilder: (context, error, stackTrace) =>
+              _initialsAvatar(initial, 50),
+        ),
+      );
+    }
+    return _initialsAvatar(initial, 50);
   }
 
   Widget _initialsAvatar(String initial, double radius) {
     return CircleAvatar(
       radius: radius,
-      backgroundColor: const Color(0xFF6D391E),
+      backgroundColor: AppTheme.primary,
       child: Text(
         initial,
-        style: TextStyle(
-          fontSize: radius * 0.8,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
+        style: AppTheme.headingLarge.copyWith(
+          fontSize: radius * 0.7,
+          color: AppTheme.surface,
         ),
-      ),
-    );
-  }
-
-  Widget _buildInfoCard() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: Column(
-        children: [
-          _buildInfoRow(
-            'Registration Date',
-            _formatDate(_profile!.user.registeredDate),
-            Icons.calendar_today,
-          ),
-          _buildDivider(),
-          _buildInfoRow('First Name', _profile!.user.firstName, Icons.person),
-          _buildDivider(),
-          _buildInfoRow(
-            'Last Name',
-            _profile!.user.lastName,
-            Icons.person_outline,
-          ),
-          _buildDivider(),
-          _buildInfoRow(
-            'Username',
-            _profile!.user.username,
-            Icons.account_circle,
-          ),
-          _buildDivider(),
-          _buildInfoRow('Email', _profile!.user.email, Icons.email),
-          _buildDivider(),
-          _buildInfoRow(
-            'Phone Number',
-            _profile!.user.phone.isEmpty ? '-' : _profile!.user.phone,
-            Icons.phone,
-          ),
-          _buildDivider(),
-          _buildInfoRow(
-            'Skill/Occupation',
-            _profile!.user.jobTitle.isEmpty
-                ? 'Student'
-                : _profile!.user.jobTitle,
-            Icons.work,
-          ),
-          _buildDivider(),
-          _buildInfoRow(
-            'Biography',
-            _profile!.user.bio.isEmpty ? '-' : _profile!.user.bio,
-            Icons.info,
-            isMultiline: true,
-          ),
-        ],
       ),
     );
   }
@@ -311,47 +321,33 @@ class _ProfilePageState extends State<ProfilePage> {
     bool isMultiline = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      child: Row(
+        crossAxisAlignment: isMultiline
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 20, color: Colors.grey[600]),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
+          Icon(icon, size: 18, color: AppTheme.primary.withValues(alpha: 0.6)),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: AppTheme.labelSmall),
+                const SizedBox(height: 3),
+                Text(
+                  value,
+                  style: AppTheme.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: isMultiline ? null : 1,
+                  overflow: isMultiline ? null : TextOverflow.ellipsis,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 16,
-              color: Colors.black87,
-              fontWeight: FontWeight.w500,
+              ],
             ),
-            maxLines: isMultiline ? null : 1,
-            overflow: isMultiline ? null : TextOverflow.ellipsis,
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildDivider() {
-    return Divider(
-      height: 1,
-      thickness: 1,
-      color: Colors.grey[200],
-      indent: 20,
-      endIndent: 20,
     );
   }
 }

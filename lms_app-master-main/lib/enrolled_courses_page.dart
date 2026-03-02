@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_theme.dart';
 import 'services/api_service.dart';
 import 'course_details_page.dart';
 import 'course_reviews_page.dart';
@@ -11,7 +12,6 @@ class EnrolledCoursesPage extends StatefulWidget {
 }
 
 class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
-  final Color primaryBrown = const Color(0xFF6D391E);
   late Future<List<dynamic>> _coursesFuture;
 
   @override
@@ -34,43 +34,49 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFDFDFD),
-      appBar: AppBar(
-        title: const Text(
-          "My Learning",
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        elevation: 0.5,
-        foregroundColor: primaryBrown,
+      backgroundColor: AppTheme.background,
+      appBar: AppTheme.buildAppBar(
+        title: "My Learning",
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded, size: 20),
             onPressed: _handleRefresh,
-            tooltip: 'Reload Courses',
           ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: _handleRefresh,
-        color: primaryBrown,
+        color: AppTheme.primary,
         child: FutureBuilder<List<dynamic>>(
           future: _coursesFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return Center(
-                child: CircularProgressIndicator(color: primaryBrown),
+              return const Center(
+                child: CircularProgressIndicator(color: AppTheme.primary),
               );
             }
 
             final allCourses = snapshot.data ?? [];
             if (allCourses.isEmpty) {
               return ListView(
-                children: const [
-                  SizedBox(height: 100),
+                children: [
+                  const SizedBox(height: 160),
                   Center(
-                    child: Text("No courses found. Pull down to refresh."),
+                    child: Column(
+                      children: [
+                        Text(
+                          "No courses yet",
+                          style: AppTheme.bodyMedium.copyWith(
+                            color: Colors.grey[400],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Pull down to refresh",
+                          style: AppTheme.labelSmall,
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               );
@@ -90,26 +96,20 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
                 .toList();
 
             return ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(20, 28, 20, 48),
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
                 if (inProgress.isNotEmpty) ...[
-                  const Text(
-                    "In Progress",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  ...inProgress.map((course) => _buildCourseCard(course)),
+                  _buildSectionLabel("IN PROGRESS", inProgress.length),
+                  const SizedBox(height: 14),
+                  ...inProgress.map((c) => _buildCourseCard(c)),
                 ],
                 if (completed.isNotEmpty) ...[
-                  const SizedBox(height: 24),
-                  const Text(
-                    "Completed",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
+                  if (inProgress.isNotEmpty) const SizedBox(height: 32),
+                  _buildSectionLabel("COMPLETED", completed.length),
+                  const SizedBox(height: 14),
                   ...completed.map(
-                    (course) => _buildCourseCard(course, isCompleted: true),
+                    (c) => _buildCourseCard(c, isCompleted: true),
                   ),
                 ],
               ],
@@ -120,6 +120,27 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
     );
   }
 
+  Widget _buildSectionLabel(String label, int count) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(label, style: AppTheme.overline),
+        const SizedBox(width: 10),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: AppTheme.sectionPillDecoration,
+          child: Text(
+            "$count",
+            style: AppTheme.overline.copyWith(
+              letterSpacing: 0,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildCourseCard(dynamic course, {bool isCompleted = false}) {
     final double progress =
         double.tryParse(course['progress'].toString()) ?? 0.0;
@@ -127,6 +148,8 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
         double.tryParse(course['rating_avg']?.toString() ?? '0') ?? 0.0;
     final int reviewCount =
         int.tryParse(course['rating_count']?.toString() ?? '0') ?? 0;
+    final bool hasThumbnail =
+        course['thumbnail'] != null && course['thumbnail'].isNotEmpty;
 
     return GestureDetector(
       onTap: () async {
@@ -142,169 +165,116 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
         _handleRefresh();
       },
       child: Container(
-        margin: const EdgeInsets.only(bottom: 20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isCompleted
-                ? Colors.green.withValues(alpha: 0.3)
-                : primaryBrown.withValues(alpha: 0.2),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(12),
-                  ),
-                  child:
-                      course['thumbnail'] != null &&
-                          course['thumbnail'].isNotEmpty
-                      ? Image.network(
-                          course['thumbnail'],
-                          height: 160,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (c, e, s) => _buildPlaceholder(),
-                        )
-                      : _buildPlaceholder(),
-                ),
-                if (isCompleted)
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.green,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.check_circle,
-                            color: Colors.white,
-                            size: 16,
+        margin: const EdgeInsets.only(bottom: 18),
+        decoration: AppTheme.cardDecoration,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Thumbnail
+              SizedBox(
+                height: 168,
+                width: double.infinity,
+                child: hasThumbnail
+                    ? Image.network(
+                        course['thumbnail'],
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) => _placeholder(),
+                      )
+                    : _placeholder(),
+              ),
+
+              // Body
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      course['title'],
+                      style: AppTheme.cardTitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    // Rating
+                    GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (c) => CourseReviewsPage(
+                            courseId: course['id'],
+                            courseTitle: course['title'],
                           ),
-                          SizedBox(width: 4),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          ...List.generate(5, (i) {
+                            if (rating >= i + 1) {
+                              return Icon(
+                                Icons.star_rounded,
+                                color: Colors.amber[500],
+                                size: 13,
+                              );
+                            } else if (rating > i && rating < i + 1) {
+                              return Icon(
+                                Icons.star_half_rounded,
+                                color: Colors.amber[500],
+                                size: 13,
+                              );
+                            } else {
+                              return Icon(
+                                Icons.star_outline_rounded,
+                                color: Colors.grey[300],
+                                size: 13,
+                              );
+                            }
+                          }),
+                          const SizedBox(width: 7),
                           Text(
-                            "COMPLETED",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+                            rating > 0
+                                ? "${rating.toStringAsFixed(1)}  ·  $reviewCount review${reviewCount != 1 ? 's' : ''}"
+                                : "No reviews yet",
+                            style: AppTheme.labelSmall.copyWith(
+                              color: rating > 0
+                                  ? Colors.blue[600]
+                                  : Colors.grey[400],
+                              decoration: rating > 0
+                                  ? TextDecoration.underline
+                                  : TextDecoration.none,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-              child: Text(
-                course['title'],
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-            ),
 
-            // Star Rating with Navigation to Reviews
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (c) => CourseReviewsPage(
-                        courseId: course['id'],
-                        courseTitle: course['title'],
-                      ),
-                    ),
-                  );
-                },
-                child: Row(
-                  children: [
-                    ...List.generate(5, (index) {
-                      return Icon(
-                        index < rating.floor() ? Icons.star : Icons.star_border,
-                        color: rating > 0 ? Colors.orange : Colors.grey[300],
-                        size: 16,
-                      );
-                    }),
-                    const SizedBox(width: 8),
-                    Text(
-                      "${rating.toStringAsFixed(1)} ($reviewCount Reviews)",
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.blue,
-                        decoration: TextDecoration.underline,
-                      ),
+                    const SizedBox(height: 16),
+                    AppTheme.cardDivider,
+                    const SizedBox(height: 14),
+
+                    AppTheme.buildProgressBar(
+                      progress,
+                      isCompleted: isCompleted,
                     ),
                   ],
                 ),
               ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: LinearProgressIndicator(
-                        value: progress / 100,
-                        backgroundColor: Colors.grey[200],
-                        color: isCompleted ? Colors.green : primaryBrown,
-                        minHeight: 4,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    isCompleted ? "Done!" : "${progress.toInt()}%",
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isCompleted ? Colors.green : Colors.black54,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildPlaceholder() {
+  Widget _placeholder() {
     return Container(
-      height: 160,
+      height: 168,
       width: double.infinity,
-      color: const Color(0xFFF5F5F5),
-      child: const Icon(Icons.image_outlined, size: 40, color: Colors.grey),
+      color: AppTheme.placeholder,
     );
   }
 }
