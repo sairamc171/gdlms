@@ -22,7 +22,6 @@ class _QuizAttemptsPageState extends State<QuizAttemptsPage> {
     setState(() => _isLoading = true);
 
     try {
-      // Get all quiz attempts for the current user
       final attempts = await apiService.getAllUserQuizAttempts();
 
       setState(() {
@@ -88,19 +87,10 @@ class _QuizAttemptsPageState extends State<QuizAttemptsPage> {
     final totalQuestions = attempt['total_questions'] ?? 0;
     final totalCorrect = attempt['total_correct'] ?? 0;
 
-    // Handle both string and numeric values from API safely
     final totalMarks = _parseDouble(attempt['total_marks']);
     final earnedMarks = _parseDouble(attempt['earned_marks']);
 
-    final attemptStatus = attempt['attempt_status'] ?? 'completed';
-    final attemptDate =
-        attempt['attempt_ended_at'] ?? attempt['attempt_started_at'] ?? '';
-
-    // Calculate percentage
     final percentage = totalMarks > 0 ? (earnedMarks / totalMarks) * 100 : 0;
-
-    // FIX: Use ONLY the calculated percentage to determine Pass/Fail label.
-    // Standard Tutor LMS passing grade is 70% or higher.
     final bool isPassed = percentage >= 70;
 
     return Card(
@@ -131,13 +121,13 @@ class _QuizAttemptsPageState extends State<QuizAttemptsPage> {
                   ),
                   decoration: BoxDecoration(
                     color: isPassed
-                        ? Colors.green.withOpacity(0.1)
-                        : Colors.red.withOpacity(0.1),
+                        ? Colors.green.withValues(alpha: 0.1)
+                        : Colors.red.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: isPassed
-                          ? Colors.green.withOpacity(0.3)
-                          : Colors.red.withOpacity(0.3),
+                          ? Colors.green.withValues(alpha: 0.3)
+                          : Colors.red.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Text(
@@ -176,30 +166,6 @@ class _QuizAttemptsPageState extends State<QuizAttemptsPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
-                const SizedBox(width: 8),
-                Text(
-                  _formatDate(attemptDate),
-                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                ),
-                const Spacer(),
-                Text(
-                  // Show the actual DB status string here for debugging, but it doesn't affect the label
-                  attemptStatus.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[500],
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
           ],
         ),
       ),
@@ -223,46 +189,11 @@ class _QuizAttemptsPageState extends State<QuizAttemptsPage> {
     );
   }
 
-  String _formatDate(String dateString) {
-    if (dateString.isEmpty) return 'Unknown date';
-
-    try {
-      // WordPress stores local time without timezone suffix.
-      // Parse as local time by appending nothing — DateTime.parse without Z = local.
-      final date = DateTime.parse(dateString.trim());
-      final now = DateTime.now();
-
-      // Compare date only (strip time component) for day labels
-      final dateOnly = DateTime(date.year, date.month, date.day);
-      final todayOnly = DateTime(now.year, now.month, now.day);
-      final difference = todayOnly.difference(dateOnly).inDays;
-
-      if (difference == 0) {
-        // Same day — show time instead
-        final hour = date.hour.toString().padLeft(2, '0');
-        final minute = date.minute.toString().padLeft(2, '0');
-        return 'Today';
-      } else if (difference == 1) {
-        return 'Yesterday';
-      } else if (difference < 7) {
-        return '$difference days ago';
-      } else {
-        return '${date.day}/${date.month}/${date.year}';
-      }
-    } catch (e) {
-      return dateString;
-    }
-  }
-
-  /// Helper method to safely parse double values from API
-  /// Handles both string and numeric types
   double _parseDouble(dynamic value) {
     if (value == null) return 0.0;
     if (value is double) return value;
     if (value is int) return value.toDouble();
-    if (value is String) {
-      return double.tryParse(value) ?? 0.0;
-    }
+    if (value is String) return double.tryParse(value) ?? 0.0;
     return 0.0;
   }
 }

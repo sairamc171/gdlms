@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'services/api_service.dart';
 import 'lesson_player_page.dart';
-import 'quiz_intro_page.dart'; // Added for smart routing consistency
+import 'quiz_intro_page.dart';
+
+final RouteObserver<ModalRoute<void>> courseRouteObserver =
+    RouteObserver<ModalRoute<void>>();
 
 class CourseDetailsPage extends StatefulWidget {
+  static const routeName = '/course-details';
+
   final int courseId;
   final String title;
 
@@ -17,13 +22,14 @@ class CourseDetailsPage extends StatefulWidget {
   State<CourseDetailsPage> createState() => _CourseDetailsPageState();
 }
 
-class _CourseDetailsPageState extends State<CourseDetailsPage> {
+class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
   final Color primaryBrown = const Color(0xFF6D391E);
   final Color headerFillColor = const Color(0xFFF3F4F9);
 
   List<dynamic>? _topics;
   Map<String, dynamic>? _ratingData;
   bool _isLoading = true;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -31,8 +37,30 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
     _refreshCurriculum();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    courseRouteObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
+  void dispose() {
+    courseRouteObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    _refreshCurriculum();
+  }
+
   Future<void> _refreshCurriculum() async {
-    setState(() => _isLoading = _topics == null);
+    if (_topics == null) {
+      setState(() => _isLoading = true);
+    } else {
+      setState(() => _isRefreshing = true);
+    }
+
     try {
       final results = await Future.wait([
         apiService.getCourseCurriculum(widget.courseId),
@@ -44,11 +72,15 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
           _topics = results[0] as List<dynamic>?;
           _ratingData = results[1] as Map<String, dynamic>?;
           _isLoading = false;
+          _isRefreshing = false;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _isRefreshing = false;
+        });
       }
     }
   }
@@ -78,27 +110,39 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
         color: primaryBrown,
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(),
-                    const SizedBox(height: 20),
-                    _buildThumbnail(),
-                    _buildCurriculumHeader(),
-                    _buildCurriculumList(),
-                    const Divider(
-                      height: 40,
-                      thickness: 1,
-                      indent: 20,
-                      endIndent: 20,
+            : Stack(
+                children: [
+                  SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildHeader(),
+                        const SizedBox(height: 20),
+                        _buildThumbnail(),
+                        _buildCurriculumHeader(),
+                        _buildCurriculumList(),
+                        const Divider(
+                          height: 40,
+                          thickness: 1,
+                          indent: 20,
+                          endIndent: 20,
+                        ),
+                        if (_ratingData != null &&
+                            _ratingData!['reviews'] != null)
+                          _buildReviewList(_ratingData!['reviews']),
+                        const SizedBox(height: 50),
+                      ],
                     ),
-                    if (_ratingData != null && _ratingData!['reviews'] != null)
-                      _buildReviewList(_ratingData!['reviews']),
-                    const SizedBox(height: 50),
-                  ],
-                ),
+                  ),
+                  if (_isRefreshing)
+                    const Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: LinearProgressIndicator(),
+                    ),
+                ],
               ),
       ),
     );
@@ -107,11 +151,11 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
   Widget _buildCurriculumList() {
     if (_topics == null) return const SizedBox();
 
-    List<dynamic> allItems = [];
+    final List<dynamic> allItems = [];
     for (var topic in _topics!) {
       allItems.addAll(topic['items'] ?? []);
     }
-    List<int> allItemIds = allItems
+    final List<int> allItemIds = allItems
         .map((item) => int.parse(item['id'].toString()))
         .toList();
 
@@ -142,15 +186,12 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
               ),
             ),
             children: lessons.map((item) {
-              bool isDone = _toBool(item['is_completed']);
-              bool isLocked = _toBool(
-                item['is_locked'],
-              ); // STRICT SEQUENTIAL CHECK
-              String type = item['type'] ?? 'tutor_lesson';
-              bool isQuiz = type == 'tutor_quiz';
+              final bool isDone = _toBool(item['is_completed']);
+              final bool isLocked = _toBool(item['is_locked']);
+              final String type = item['type'] ?? 'tutor_lesson';
+              final bool isQuiz = type == 'tutor_quiz';
 
               return ListTile(
-                // Sequential Logic: Show lock if locked, checkmark if done, play if available
                 leading: Icon(
                   isLocked
                       ? Icons.lock
@@ -175,7 +216,6 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
                     : null,
                 onTap: isLocked
                     ? () {
-                        // Visual feedback if user taps a locked item
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
@@ -185,20 +225,20 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
                           ),
                         );
                       }
-                    : () async {
-                        bool? needsRefresh;
+                    : () {
                         if (isQuiz) {
-                          needsRefresh = await Navigator.push(
+                          Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (c) => QuizIntroPage(
                                 quizId: int.parse(item['id'].toString()),
                                 quizTitle: item['title'],
+                                allLessonIds: allItemIds, // ← FIXED
                               ),
                             ),
                           );
                         } else {
-                          needsRefresh = await Navigator.push(
+                          Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (c) => LessonPlayerPage(
@@ -207,10 +247,6 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
                               ),
                             ),
                           );
-                        }
-
-                        if (needsRefresh == true) {
-                          _refreshCurriculum();
                         }
                       },
               );
@@ -221,7 +257,7 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> {
     );
   }
 
-  // --- EXISTING UI HELPER METHODS ---
+  // ── UI helpers ────────────────────────────────────────────────────────────
 
   Widget _buildReviewList(List<dynamic> reviews) {
     return Column(

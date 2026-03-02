@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dashboard_page.dart';
 import 'services/api_service.dart';
 import 'forgot_password_page.dart';
+import 'course_details_page.dart'; // for courseRouteObserver
 import 'reset_password_page.dart';
 import 'package:flutter/services.dart';
 
@@ -103,7 +104,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
-
+      navigatorObservers: [courseRouteObserver],
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,

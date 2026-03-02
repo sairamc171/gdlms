@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'services/api_service.dart';
 import 'quiz_intro_page.dart';
 import 'quiz_result_page.dart';
+import 'course_details_page.dart'; // for courseRouteObserver
 import 'dart:async';
 
 class LessonPlayerPage extends StatefulWidget {
@@ -21,7 +21,7 @@ class LessonPlayerPage extends StatefulWidget {
   State<LessonPlayerPage> createState() => _LessonPlayerPageState();
 }
 
-class _LessonPlayerPageState extends State<LessonPlayerPage> {
+class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
   Map<String, dynamic>? _lessonData;
   bool _isLoading = true;
   bool _isMarkingComplete = false;
@@ -40,25 +40,20 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
   @override
   void initState() {
     super.initState();
-    // Allow all orientations so video fullscreen works naturally
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
     _fetchStatusFromWebsite();
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    courseRouteObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
   void dispose() {
+    courseRouteObserver.unsubscribe(this);
     _webViewController?.removeJavaScriptHandler(handlerName: 'VideoProgress');
     _cachedPlayer = null;
-    // Restore portrait when leaving
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
     super.dispose();
   }
 
@@ -101,20 +96,30 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
   Future<void> _fetchStatusFromWebsite() async {
     final data = await apiService.getLessonDetails(widget.lessonId);
 
-    debugPrint('=== RAW is_completed: ${data?['is_completed']}');
-    debugPrint('=== TYPE: ${data?['is_completed'].runtimeType}');
-    debugPrint('=== _toBool result: ${_toBool(data?['is_completed'])}');
+    if (!mounted) return;
 
-    if (data != null && mounted) {
+    if (data != null) {
       final isCompleted = _toBool(data['is_completed']);
-      debugPrint('=== isCompleted final: $isCompleted');
-
       final hasNoVideo = (data['video_id']?.toString() ?? '').isEmpty;
       setState(() {
         _lessonData = data;
         _isLessonCompleted = isCompleted;
         if (hasNoVideo && !isCompleted) _isButtonEnabled = true;
         if (isCompleted) _isButtonEnabled = true;
+        _isLoading = false;
+      });
+    } else {
+      // API returned null — still show the page with a minimal fallback
+      setState(() {
+        _lessonData = {
+          'id': widget.lessonId,
+          'title': 'Lesson',
+          'content': '',
+          'video_id': '',
+          'is_completed': false,
+          'next_lesson_id': null,
+        };
+        _isButtonEnabled = true;
         _isLoading = false;
       });
     }
@@ -142,7 +147,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
     if (!mounted) return;
 
     if (nextId == null || nextId == 0) {
-      Navigator.pop(context, true);
+      Navigator.pop(context);
       return;
     }
 
@@ -152,7 +157,8 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
 
     if (!mounted || nextData == null) return;
 
-    if (nextData['type'] == 'quiz') {
+    final nextType = nextData['type']?.toString() ?? '';
+    if (nextType == 'quiz' || nextType == 'tutor_quiz') {
       final quizId = nextData['id'];
       if (_toBool(nextData['is_completed'])) {
         final attempt = await _checkQuizCompletion(quizId);
@@ -164,6 +170,8 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
               builder: (c) => QuizResultPage(
                 totalQuestions: _parseInt(attempt['total_questions']),
                 correctAnswers: _parseInt(attempt['total_correct']),
+                allLessonIds: widget.allLessonIds,
+                currentQuizId: quizId,
               ),
             ),
           );
@@ -174,8 +182,11 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (c) =>
-              QuizIntroPage(quizId: quizId, quizTitle: nextData['title']),
+          builder: (c) => QuizIntroPage(
+            quizId: quizId,
+            quizTitle: nextData['title'],
+            allLessonIds: widget.allLessonIds,
+          ),
         ),
       );
     } else {
@@ -189,6 +200,24 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
         ),
       );
     }
+  }
+
+  // ─────────────────────────────────────────────
+  // Derives previous lesson ID from allLessonIds
+  // ─────────────────────────────────────────────
+  int? get _previousLessonId {
+    final idx = widget.allLessonIds.indexOf(widget.lessonId);
+    if (idx > 0) return widget.allLessonIds[idx - 1];
+    return null;
+  }
+
+  int? get _nextLessonId {
+    final idx = widget.allLessonIds.indexOf(widget.lessonId);
+    if (idx >= 0 && idx < widget.allLessonIds.length - 1) {
+      return widget.allLessonIds[idx + 1];
+    }
+    final parsedFromApi = _parseInt(_lessonData?['next_lesson_id']);
+    return parsedFromApi > 0 ? parsedFromApi : null;
   }
 
   @override
@@ -269,6 +298,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
             ),
           ),
         ),
+        _buildPrevNextButtons(),
         _buildSyncButton(),
       ],
     );
@@ -320,6 +350,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
                   ),
                 ),
               ),
+              _buildPrevNextButtons(compact: true),
               _buildSyncButton(compact: true),
             ],
           ),
@@ -329,12 +360,82 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
   }
 
   // ─────────────────────────────────────────────
+  // PREV / NEXT BUTTONS
+  // ─────────────────────────────────────────────
+  Widget _buildPrevNextButtons({bool compact = false}) {
+    final hasPrev = _previousLessonId != null;
+    final hasNext = _nextLessonId != null && _isButtonEnabled;
+
+    return Padding(
+      padding: compact
+          ? const EdgeInsets.fromLTRB(12, 4, 12, 4)
+          : const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      child: Row(
+        children: [
+          // ── Previous ──
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: hasPrev
+                  ? () => _handleNavigation(_previousLessonId)
+                  : null,
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 14),
+              label: Text(
+                'Previous',
+                style: TextStyle(fontSize: compact ? 13 : 15),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: primaryBrown,
+                disabledForegroundColor: Colors.grey.shade400,
+                side: BorderSide(
+                  color: hasPrev ? primaryBrown : Colors.grey.shade300,
+                ),
+                minimumSize: Size(0, compact ? 42 : 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // ── Next ──
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: hasNext
+                  ? () async {
+                      if (!_isLessonCompleted) {
+                        await _syncCompletionToWebsite();
+                      }
+                      if (mounted) _handleNavigation(_nextLessonId);
+                    }
+                  : null,
+              icon: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+              label: Text(
+                'Next',
+                style: TextStyle(fontSize: compact ? 13 : 15),
+              ),
+              iconAlignment: IconAlignment.end,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: primaryBrown,
+                disabledForegroundColor: Colors.grey.shade400,
+                side: BorderSide(
+                  color: hasNext ? primaryBrown : Colors.grey.shade300,
+                ),
+                minimumSize: Size(0, compact ? 42 : 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
   // PLAYER — built once, cached to survive rebuilds
   // ─────────────────────────────────────────────
   Widget _buildPlayer(String videoId) {
-    // Return the cached instance if it already exists.
-    // This prevents the WebView from being destroyed and recreated
-    // on every orientation change, which caused the crash.
     if (_cachedPlayer != null) return _cachedPlayer!;
 
     const String authorizedDomain = 'https://lms.gdcollege.ca/';
@@ -383,8 +484,6 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
             javaScriptEnabled: true,
             allowsInlineMediaPlayback: true,
             mediaPlaybackRequiresUserGesture: false,
-            // Let the webview handle its own fullscreen natively
-            // without Flutter intercepting and rebuilding the widget tree
             supportZoom: false,
           ),
           onWebViewCreated: (controller) {
@@ -405,9 +504,6 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
               },
             );
           },
-          // No onEnterFullscreen/onExitFullscreen callbacks —
-          // those triggered Flutter to rebuild mid-transition causing the crash.
-          // The webview now handles fullscreen entirely on its own natively.
         ),
       ),
     );
