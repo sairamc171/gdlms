@@ -72,8 +72,10 @@ class _QuizResultPageState extends State<QuizResultPage>
   int? get _nextId {
     if (widget.allLessonIds.isEmpty || widget.currentQuizId == 0) return null;
     final idx = widget.allLessonIds.indexOf(widget.currentQuizId);
-    if (idx >= 0 && idx < widget.allLessonIds.length - 1)
+    if (idx >= 0 && idx < widget.allLessonIds.length - 1) {
       return widget.allLessonIds[idx + 1];
+    }
+
     return null;
   }
 

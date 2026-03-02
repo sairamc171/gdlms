@@ -37,7 +37,7 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
       body: IndexedStack(index: _selectedIndex, children: _pages),
       bottomNavigationBar: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: AppTheme.surface,
           border: Border(top: BorderSide(color: AppTheme.divider)),
         ),

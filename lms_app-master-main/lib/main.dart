@@ -106,7 +106,7 @@ class _MyAppState extends State<MyApp> {
       navigatorKey: _navigatorKey,
       navigatorObservers: [courseRouteObserver],
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.themeData, // ← single source of truth
+      theme: AppTheme.themeData,
       home: _buildHome(),
     );
   }
@@ -138,7 +138,6 @@ class _LoginPageState extends State<LoginPage> {
   final _userController = TextEditingController();
   final _passController = TextEditingController();
   bool _isLoading = false;
-  bool _keepSignedIn = false;
   bool _obscurePassword = true;
 
   // Login page keeps its own warm beige bg — intentionally distinct from app bg
@@ -206,56 +205,25 @@ class _LoginPageState extends State<LoginPage> {
                 onSubmitted: (_) => _handleLogin(),
               ),
 
-              // Keep signed in + Forgot Password
+              // Forgot Password
               const SizedBox(height: 14),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: Checkbox(
-                          value: _keepSignedIn,
-                          onChanged: (v) =>
-                              setState(() => _keepSignedIn = v ?? false),
-                          activeColor: AppTheme.primary,
-                          side: BorderSide(
-                            color: Colors.grey.shade500,
-                            width: 1.5,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Keep me signed in',
-                        style: AppTheme.labelMedium.copyWith(
-                          color: AppTheme.primary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                  GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ForgotPasswordPage(),
-                      ),
-                    ),
-                    child: Text(
-                      'Forgot Password?',
-                      style: AppTheme.labelMedium.copyWith(
-                        color: AppTheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ForgotPasswordPage(),
                     ),
                   ),
-                ],
+                  child: Text(
+                    'Forgot Password?',
+                    style: AppTheme.labelMedium.copyWith(
+                      color: AppTheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               ),
 
               // Sign In button

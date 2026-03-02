@@ -13,11 +13,14 @@ class CourseDetailsPage extends StatefulWidget {
 
   final int courseId;
   final String title;
+  // Passed from EnrolledCoursesPage — already available, no extra fetch needed.
+  final String? thumbnailUrl;
 
   const CourseDetailsPage({
     super.key,
     required this.courseId,
     required this.title,
+    this.thumbnailUrl,
   });
 
   @override
@@ -29,10 +32,12 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
   Map<String, dynamic>? _ratingData;
   bool _isLoading = true;
   bool _isRefreshing = false;
+  String? _dynamicThumbnailUrl; // Add this
 
   @override
   void initState() {
     super.initState();
+    _dynamicThumbnailUrl = widget.thumbnailUrl;
     _refreshCurriculum();
   }
 
@@ -64,12 +69,17 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
       final results = await Future.wait([
         apiService.getCourseCurriculum(widget.courseId),
         apiService.getCourseRatings(widget.courseId),
+        apiService.getCourseDetails(widget.courseId), // New Call
       ]);
 
       if (mounted) {
         setState(() {
           _topics = results[0] as List<dynamic>?;
           _ratingData = results[1] as Map<String, dynamic>?;
+          final courseData = results[2] as Map<String, dynamic>?;
+          if (courseData != null && courseData['thumbnail'] != null) {
+            _dynamicThumbnailUrl = courseData['thumbnail'];
+          }
           _isLoading = false;
           _isRefreshing = false;
         });
@@ -134,6 +144,36 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
     );
   }
 
+  Widget _buildThumbnail() {
+    final url = _dynamicThumbnailUrl;
+    return SizedBox(
+      width: double.infinity,
+      height: 200,
+      child: (url != null && url.isNotEmpty)
+          ? Image.network(
+              url,
+              width: double.infinity,
+              height: 200,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return Container(color: AppTheme.placeholder);
+              },
+              errorBuilder: (_, __, ___) => _thumbnailPlaceholder(),
+            )
+          : _thumbnailPlaceholder(),
+    );
+  }
+
+  Widget _thumbnailPlaceholder() {
+    return Container(
+      color: AppTheme.placeholder,
+      child: const Center(
+        child: Icon(Icons.school_outlined, size: 48, color: AppTheme.textHint),
+      ),
+    );
+  }
+
   // ── Curriculum ─────────────────────────────────────────────────────────────
 
   Widget _buildCurriculumHeader() {
@@ -194,7 +234,7 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
                 iconColor: AppTheme.primary,
                 collapsedIconColor: AppTheme.textHint,
                 children: [
-                  Divider(height: 1, color: AppTheme.divider),
+                  const Divider(height: 1, color: AppTheme.divider),
                   ...lessons.map((item) {
                     final bool isDone = _toBool(item['is_completed']);
                     final bool isLocked = _toBool(item['is_locked']);
@@ -254,7 +294,7 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
                           ? null
                           : isLocked
                           ? null
-                          : Icon(
+                          : const Icon(
                               Icons.chevron_right,
                               color: AppTheme.textHint,
                               size: 20,
@@ -271,8 +311,10 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
                                   ),
                                   backgroundColor: AppTheme.primary,
                                   behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.all(
+                                      Radius.circular(10),
+                                    ),
                                   ),
                                 ),
                               );
@@ -330,7 +372,6 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Section header
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
             child: Row(
@@ -344,39 +385,38 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
                     Container(height: 3, width: 60, color: AppTheme.primary),
                   ],
                 ),
-                // "See All / Write" button → goes to full reviews page
-                TextButton.icon(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => CourseReviewsPage(
-                        courseId: widget.courseId,
-                        courseTitle: widget.title,
+                // Only show "See All" at the top if there are actually reviews to see
+                if (ratingCount > 0)
+                  TextButton.icon(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CourseReviewsPage(
+                          courseId: widget.courseId,
+                          courseTitle: widget.title,
+                        ),
+                      ),
+                    ).then((_) => _refreshCurriculum()),
+                    icon: const Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 16,
+                      color: AppTheme.primary,
+                    ),
+                    label: Text(
+                      'See All',
+                      style: AppTheme.labelMedium.copyWith(
+                        color: AppTheme.primary,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ).then((_) => _refreshCurriculum()),
-                  icon: Icon(
-                    hasMyReview
-                        ? Icons.rate_review_outlined
-                        : Icons.edit_outlined,
-                    size: 16,
-                    color: AppTheme.primary,
                   ),
-                  label: Text(
-                    hasMyReview ? 'See All' : 'Write a Review',
-                    style: AppTheme.labelMedium.copyWith(
-                      color: AppTheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
 
           const SizedBox(height: 4),
 
-          // Rating summary row
+          // Rating Summary Card
           if (ratingCount > 0)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -407,7 +447,7 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
               ),
             ),
 
-          // Preview of up to 2 reviews
+          // Empty State or Review List
           if (reviews.isEmpty)
             Container(
               width: double.infinity,
@@ -438,33 +478,7 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
           else
             ...reviews.take(2).map((r) => _buildReviewCard(r)),
 
-          // "See all reviews" link if there are more than 2
-          if (reviews.length > 2)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Center(
-                child: TextButton(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => CourseReviewsPage(
-                        courseId: widget.courseId,
-                        courseTitle: widget.title,
-                      ),
-                    ),
-                  ).then((_) => _refreshCurriculum()),
-                  child: Text(
-                    'See all ${reviews.length} reviews',
-                    style: AppTheme.labelMedium.copyWith(
-                      color: AppTheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-          // Write a Review CTA (if user hasn't reviewed yet)
+          // Primary "Write a Review" Button (Shown only if user hasn't reviewed yet)
           if (!hasMyReview) ...[
             const SizedBox(height: 12),
             SizedBox(
@@ -495,8 +509,8 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primary,
                   elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(14)),
                   ),
                 ),
               ),
@@ -514,7 +528,6 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
     final bool isMyReview =
         r['display_name'] == apiService.user?['user_display_name'];
 
-    // Resolve avatar: prefer live session photo for own review
     String photoUrl = (r['profile_photo'] as String?) ?? '';
     if (isMyReview) {
       final String? sessionPhoto = apiService.user?['profile_photo'] as String?;
@@ -525,12 +538,12 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
       }
     }
 
+    final parts = displayName.trim().split(RegExp(r'\s+'));
     final String initials = displayName.trim().isEmpty
         ? '?'
-        : displayName.trim().split(RegExp(r'\s+')).length >= 2
-        ? '${displayName.trim().split(RegExp(r'\s+'))[0][0]}${displayName.trim().split(RegExp(r'\s+')).last[0]}'
-              .toUpperCase()
-        : displayName.trim()[0].toUpperCase();
+        : parts.length >= 2
+        ? '${parts.first[0]}${parts.last[0]}'.toUpperCase()
+        : parts.first[0].toUpperCase();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -557,7 +570,6 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
         children: [
           Row(
             children: [
-              // Avatar
               photoUrl.isNotEmpty && photoUrl.startsWith('http')
                   ? ClipOval(
                       child: Image.network(
@@ -612,7 +624,7 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
           ),
           if (content.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Divider(height: 1, color: AppTheme.divider),
+            const Divider(height: 1, color: AppTheme.divider),
             const SizedBox(height: 8),
             Text(
               content,
@@ -664,21 +676,6 @@ class _CourseDetailsPageState extends State<CourseDetailsPage> with RouteAware {
           );
         }
       }),
-    );
-  }
-
-  Widget _buildThumbnail() {
-    return Container(
-      width: double.infinity,
-      height: 200,
-      decoration: const BoxDecoration(
-        image: DecorationImage(
-          image: NetworkImage(
-            'https://lms.gdcollege.ca/wp-content/uploads/2025/09/Makeup-Artist-Hair-Stylist-Banner-300x198.jpg',
-          ),
-          fit: BoxFit.cover,
-        ),
-      ),
     );
   }
 }

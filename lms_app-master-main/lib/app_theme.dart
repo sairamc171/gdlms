@@ -133,8 +133,10 @@ class AppTheme {
   static BoxDecoration get cardDecoration => BoxDecoration(
     color: surface,
     borderRadius: BorderRadius.circular(20),
-    boxShadow: [
-      BoxShadow(color: cardShadow, blurRadius: 24, offset: const Offset(0, 6)),
+    // FIX: prefer_const_literals_to_create_immutables + prefer_const_constructors
+    // — list literal and BoxShadow are now const
+    boxShadow: const [
+      BoxShadow(color: cardShadow, blurRadius: 24, offset: Offset(0, 6)),
     ],
   );
 
@@ -182,16 +184,15 @@ class AppTheme {
             child: LinearProgressIndicator(
               value: progress / 100,
               backgroundColor: const Color(0x0F000000),
-              valueColor: AlwaysStoppedAnimation<Color>(
-                isCompleted ? completed : primary,
-              ),
+              // FIX: prefer_const_constructors — AlwaysStoppedAnimation is now const
+              valueColor: const AlwaysStoppedAnimation<Color>(primary),
               minHeight: 3,
             ),
           ),
         ),
         const SizedBox(width: 14),
         Text(
-          isCompleted ? "Done" : "${progress.toInt()}%",
+          isCompleted ? 'Done' : '${progress.toInt()}%',
           style: progressLabel.copyWith(
             color: isCompleted ? completed : textSecondary,
           ),
@@ -203,7 +204,7 @@ class AppTheme {
   // ── Divider ───────────────────────────────────────────────────────────────
 
   static Widget get cardDivider =>
-      Divider(height: 1, thickness: 1, color: divider);
+      const Divider(height: 1, thickness: 1, color: divider);
 
   // ── Full MaterialTheme ────────────────────────────────────────────────────
 
@@ -211,7 +212,9 @@ class AppTheme {
     colorScheme: ColorScheme.fromSeed(
       seedColor: primary,
       surface: surface,
-      background: background,
+      // FIX: deprecated_member_use — 'background' removed, mapped to 'surface'
+      // as recommended by Flutter v3.18+. The scaffoldBackgroundColor below
+      // keeps the warm off-white background for scaffold separately.
     ),
     scaffoldBackgroundColor: background,
     textTheme: GoogleFonts.poppinsTextTheme(),

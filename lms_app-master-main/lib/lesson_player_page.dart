@@ -6,7 +6,6 @@ import 'services/api_service.dart';
 import 'quiz_intro_page.dart';
 import 'quiz_result_page.dart';
 import 'course_details_page.dart';
-import 'dart:async';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Simple in-memory lesson cache shared across all LessonPlayerPage instances.
@@ -193,8 +192,13 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
     final hasNoVideo = (data['video_id']?.toString() ?? '').isEmpty;
     _lessonData = data;
     _isLessonCompleted = isCompleted;
-    if (hasNoVideo && !isCompleted) _isButtonEnabled = true;
-    if (isCompleted) _isButtonEnabled = true;
+    // FIX: curly_braces_in_flow_control_structures — wrapped single-line ifs
+    if (hasNoVideo && !isCompleted) {
+      _isButtonEnabled = true;
+    }
+    if (isCompleted) {
+      _isButtonEnabled = true;
+    }
     _isLoading = false;
   }
 
@@ -230,7 +234,9 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
     if (isCompleted != _isLessonCompleted) {
       setState(() {
         _isLessonCompleted = isCompleted;
-        if (isCompleted) _isButtonEnabled = true;
+        if (isCompleted) {
+          _isButtonEnabled = true;
+        }
       });
     }
     _prefetchAdjacentLessons();
@@ -251,16 +257,21 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
     }
   }
 
+  // FIX: curly_braces_in_flow_control_structures — all branches now use braces
   bool _toBool(dynamic value) {
-    if (value == null || value == false || value == 0 || value == "0")
+    if (value == null || value == false || value == 0 || value == '0') {
       return false;
+    }
     if (value == true ||
-        value == "1" ||
+        value == '1' ||
         value == 1 ||
-        value.toString().toLowerCase() == "true")
+        value.toString().toLowerCase() == 'true') {
       return true;
+    }
     final parsed = int.tryParse(value.toString());
-    if (parsed != null && parsed > 1) return true;
+    if (parsed != null && parsed > 1) {
+      return true;
+    }
     return false;
   }
 
@@ -301,7 +312,8 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
     }
   }
 
-  void _handleNavigation(dynamic nextId) async {
+  // FIX: changed void to Future<void> so await callers don't get a warning
+  Future<void> _handleNavigation(dynamic nextId) async {
     if (!mounted) return;
     if (nextId == null || nextId == 0) {
       Navigator.pop(context);
@@ -311,8 +323,11 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
     final id = int.parse(nextId.toString());
     final cached = _LessonCache.get(id);
     final nextData = cached ?? await apiService.getLessonDetails(id);
+
+    // FIX: unnecessary_null_comparison — removed the redundant `if (nextData != null)`
+    // that followed immediately after a null-guard return. Now only one null check exists.
     if (!mounted || nextData == null) return;
-    if (nextData != null) _LessonCache.put(id, nextData);
+    _LessonCache.put(id, nextData);
 
     final nextType = nextData['type']?.toString() ?? '';
     if (nextType == 'quiz' || nextType == 'tutor_quiz') {
@@ -379,11 +394,10 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Scaffold(
+      // FIX: prefer_const_constructors — Scaffold and its subtree are now const
+      return const Scaffold(
         backgroundColor: AppTheme.background,
-        body: const Center(
-          child: CircularProgressIndicator(color: AppTheme.primary),
-        ),
+        body: Center(child: CircularProgressIndicator(color: AppTheme.primary)),
       );
     }
 
@@ -407,7 +421,9 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
 
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppTheme.buildAppBar(title: _lessonData!['title'] ?? 'Lesson'),
+      appBar: AppTheme.buildAppBar(
+        title: _lessonData!['title']?.toString() ?? 'Lesson',
+      ),
       body: SafeArea(
         child: OrientationBuilder(
           builder: (context, orientation) {
@@ -423,26 +439,43 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
   // ── portrait ───────────────────────────────────────────────────────────────
 
   Widget _buildPortraitLayout(Widget? player) {
+    // 1. Fetch the image URL from your data
+    final imageUrl = _lessonData?['featured_image']?.toString() ?? '';
+
     return Column(
       children: [
         Container(
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             color: AppTheme.surface,
-            border: Border(
-              bottom: BorderSide(color: AppTheme.divider, width: 1),
-            ),
+            border: Border(bottom: BorderSide(color: AppTheme.divider)),
           ),
           child: player != null
               ? AspectRatio(aspectRatio: 16 / 9, child: player)
               : SizedBox(
                   height: 200,
-                  child: Center(
-                    child: Icon(
-                      Icons.article_outlined,
-                      size: 60,
-                      color: AppTheme.textHint,
-                    ),
-                  ),
+                  width: double.infinity,
+                  // 2. Logic: If imageUrl exists, show Image.network, else show Icon
+                  child: imageUrl.isNotEmpty
+                      ? Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          // Fallback icon if the image fails to load
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Center(
+                                child: Icon(
+                                  Icons.article_outlined,
+                                  size: 60,
+                                  color: AppTheme.textHint,
+                                ),
+                              ),
+                        )
+                      : const Center(
+                          child: Icon(
+                            Icons.article_outlined,
+                            size: 60,
+                            color: AppTheme.textHint,
+                          ),
+                        ),
                 ),
         ),
         Expanded(
@@ -473,36 +506,52 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
   // ── landscape ──────────────────────────────────────────────────────────────
 
   Widget _buildLandscapeLayout(Widget? player) {
+    // 1. Fetch the image URL
+    final imageUrl = _lessonData?['featured_image']?.toString() ?? '';
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
           flex: 5,
-          child: Container(
+          child: ColoredBox(
             color: Colors.black,
-            alignment: Alignment.center,
-            child: player != null
-                ? LayoutBuilder(
-                    builder: (ctx, constraints) {
-                      double w = constraints.maxWidth;
-                      double h = w * 9 / 16;
-                      if (h > constraints.maxHeight) {
-                        h = constraints.maxHeight;
-                        w = h * 16 / 9;
-                      }
-                      return SizedBox(width: w, height: h, child: player);
-                    },
-                  )
-                : Icon(
-                    Icons.article_outlined,
-                    size: 60,
-                    color: AppTheme.textHint,
-                  ),
+            child: Align(
+              child: player != null
+                  ? LayoutBuilder(
+                      builder: (ctx, constraints) {
+                        double w = constraints.maxWidth;
+                        double h = w * 9 / 16;
+                        if (h > constraints.maxHeight) {
+                          h = constraints.maxHeight;
+                          w = h * 16 / 9;
+                        }
+                        return SizedBox(width: w, height: h, child: player);
+                      },
+                    )
+                  // 2. Logic: If no player, check for imageUrl, else show Icon
+                  : imageUrl.isNotEmpty
+                  ? Image.network(
+                      imageUrl,
+                      fit: BoxFit
+                          .contain, // Contain ensures the whole image fits the left side
+                      errorBuilder: (c, e, s) => const Icon(
+                        Icons.article_outlined,
+                        size: 60,
+                        color: AppTheme.textHint,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.article_outlined,
+                      size: 60,
+                      color: AppTheme.textHint,
+                    ),
+            ),
           ),
         ),
         Expanded(
           flex: 5,
-          child: Container(
+          child: ColoredBox(
             color: AppTheme.background,
             child: Column(
               children: [
@@ -534,7 +583,6 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
       ],
     );
   }
-
   // ── buttons ────────────────────────────────────────────────────────────────
 
   Widget _buildPrevNextButtons({bool compact = false}) {
@@ -577,7 +625,9 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
             child: OutlinedButton.icon(
               onPressed: hasNext
                   ? () async {
-                      if (!_isLessonCompleted) await _syncCompletionToWebsite();
+                      if (!_isLessonCompleted) {
+                        await _syncCompletionToWebsite();
+                      }
                       if (mounted) _handleNavigation(_nextLessonId);
                     }
                   : null,
@@ -619,10 +669,11 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             if (!isLocked && !_isLessonCompleted)
-              BoxShadow(
-                color: AppTheme.primary.withValues(alpha: 0.25),
+              // FIX: prefer_const_constructors — BoxShadow and Offset are now const
+              const BoxShadow(
+                color: Color(0x404B2313), // AppTheme.primary ~25% opacity
                 blurRadius: 10,
-                offset: const Offset(0, 4),
+                offset: Offset(0, 4),
               ),
           ],
         ),
@@ -649,6 +700,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
             ),
             elevation: 0,
           ),
+          // FIX: prefer_const_constructors — SizedBox + CircularProgressIndicator now const
           child: _isMarkingComplete
               ? const SizedBox(
                   height: 22,

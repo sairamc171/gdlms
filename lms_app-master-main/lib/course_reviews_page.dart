@@ -126,7 +126,8 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
       bool success = await apiService.deleteReview(widget.courseId);
       if (mounted) {
         await _fetchReviews(showLoader: true);
-        if (context.mounted) {
+        // FIX 1: use `mounted` (State check) instead of `context.mounted`
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -176,7 +177,8 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
         _isSubmitting = false;
       });
       await _fetchReviews(showLoader: false);
-      if (context.mounted) {
+      // FIX 2: use `mounted` (State check) instead of `context.mounted`
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -193,7 +195,7 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
       }
     } else {
       setState(() => _isSubmitting = false);
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -216,8 +218,10 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
   String _getInitials(String name) {
     if (name.isEmpty) return '?';
     final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.length >= 2)
+    // FIX 3: wrap if-statement body in curly braces
+    if (parts.length >= 2) {
       return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+    }
     return parts.first[0].toUpperCase();
   }
 
@@ -542,7 +546,10 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
                                   ),
                                   if (content.isNotEmpty) ...[
                                     const SizedBox(height: 12),
-                                    Divider(height: 1, color: AppTheme.divider),
+                                    const Divider(
+                                      height: 1,
+                                      color: AppTheme.divider,
+                                    ),
                                     const SizedBox(height: 12),
                                     Text(
                                       content,
@@ -599,7 +606,11 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
         children: [
           Row(
             children: [
-              Icon(Icons.edit_outlined, size: 18, color: AppTheme.primary),
+              const Icon(
+                Icons.edit_outlined,
+                size: 18,
+                color: AppTheme.primary,
+              ),
               const SizedBox(width: 8),
               Text(
                 'Write a Review',
@@ -680,6 +691,7 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
               ),
               onPressed: _isSubmitting ? null : _handleSubmitReview,
               child: _isSubmitting
+                  // FIX 4: added const
                   ? const SizedBox(
                       height: 20,
                       width: 20,
@@ -708,6 +720,7 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
       height: 52,
       child: OutlinedButton.icon(
         onPressed: _handleDeleteReview,
+        // FIX 5: added const
         icon: const Icon(
           Icons.delete_outline_rounded,
           size: 18,

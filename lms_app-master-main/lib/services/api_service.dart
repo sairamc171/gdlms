@@ -216,6 +216,24 @@ class ApiService {
     return [];
   }
 
+  // Add this inside the ApiService class
+  Future<Map<String, dynamic>?> getCourseDetails(int courseId) async {
+    try {
+      final response = await _dio.get(
+        '/$customNamespace/course/$courseId', // Ensure this endpoint exists on your WP backend
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        return response.data['course'];
+      }
+    } on DioException catch (e) {
+      debugPrint("Course Details Error: ${e.message}");
+    } catch (e) {
+      debugPrint("Course Details Error: $e");
+    }
+    return null;
+  }
+
   Future<Map<String, dynamic>?> getLessonDetails(int lessonId) async {
     try {
       final response = await _dio.get('/$customNamespace/lesson/$lessonId');
@@ -526,7 +544,6 @@ class ApiService {
       );
       return response.statusCode == 200 && response.data['success'] == true;
     } catch (e) {
-      print("❌ Delete Review Error: $e");
       return false;
     }
   }

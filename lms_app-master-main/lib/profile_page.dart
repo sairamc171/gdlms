@@ -72,12 +72,15 @@ class _ProfilePageState extends State<ProfilePage> {
         ],
       ),
     );
-    if (confirm == true && mounted) {
+    if (confirm == true) {
       await apiService.logout();
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-        (route) => false,
-      );
+      // FIX: guard context use with mounted check after async gap
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+          (route) => false,
+        );
+      }
     }
   }
 

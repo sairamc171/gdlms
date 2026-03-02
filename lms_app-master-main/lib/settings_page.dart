@@ -26,6 +26,9 @@ class _SettingsPageState extends State<SettingsPage>
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _isResetting = false;
+  bool _showCurrentPassword = false;
+  bool _showNewPassword = false;
+  bool _showConfirmPassword = false;
 
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
@@ -75,14 +78,15 @@ class _SettingsPageState extends State<SettingsPage>
 
   Future<void> _handlePhotoUpload() async {
     try {
-      final bool isAvailable = await _picker.supportsImageSource(
-        ImageSource.gallery,
-      );
+      // FIX 1: removed `await` — supportsImageSource returns bool, not Future<bool>
+      final bool isAvailable = _picker.supportsImageSource(ImageSource.gallery);
       if (!isAvailable) {
         _showError('Image picker not available on this device');
         return;
       }
 
+      // FIX 2: guard context use with mounted check after async gap
+      if (!mounted) return;
       final ImageSource? source = await showDialog<ImageSource>(
         context: context,
         builder: (context) => AlertDialog(
@@ -93,16 +97,18 @@ class _SettingsPageState extends State<SettingsPage>
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // FIX 3: added const to Icon inside ListTile
               ListTile(
-                leading: Icon(
+                leading: const Icon(
                   Icons.camera_alt_outlined,
                   color: AppTheme.primary,
                 ),
                 title: Text('Camera', style: AppTheme.bodyMedium),
                 onTap: () => Navigator.pop(context, ImageSource.camera),
               ),
+              // FIX 4: added const to Icon inside ListTile
               ListTile(
-                leading: Icon(
+                leading: const Icon(
                   Icons.photo_library_outlined,
                   color: AppTheme.primary,
                 ),
@@ -316,18 +322,27 @@ class _SettingsPageState extends State<SettingsPage>
             "Enter current password",
             isPassword: true,
             controller: _currentPasswordController,
+            obscureText: !_showCurrentPassword,
+            onToggleVisibility: () =>
+                setState(() => _showCurrentPassword = !_showCurrentPassword),
           ),
           _buildInputField(
             "New Password",
             "Enter new password",
             isPassword: true,
             controller: _newPasswordController,
+            obscureText: !_showNewPassword,
+            onToggleVisibility: () =>
+                setState(() => _showNewPassword = !_showNewPassword),
           ),
           _buildInputField(
             "Confirm New Password",
             "Re-enter new password",
             isPassword: true,
             controller: _confirmPasswordController,
+            obscureText: !_showConfirmPassword,
+            onToggleVisibility: () =>
+                setState(() => _showConfirmPassword = !_showConfirmPassword),
           ),
           const SizedBox(height: 28),
           SizedBox(
@@ -366,13 +381,15 @@ class _SettingsPageState extends State<SettingsPage>
   }
 
   Widget _buildProfileTab() {
-    if (_profile == null)
+    // FIX 5: wrap if-statement body in curly braces
+    if (_profile == null) {
       return Center(
         child: Text(
           'Failed to load profile',
           style: AppTheme.bodyMedium.copyWith(color: Colors.grey[400]),
         ),
       );
+    }
 
     final String photoUrl = _profile!.user.profilePhoto;
     final bool hasPhoto = photoUrl.isNotEmpty;
@@ -549,6 +566,8 @@ class _SettingsPageState extends State<SettingsPage>
     String hint, {
     bool isReadOnly = false,
     bool isPassword = false,
+    bool obscureText = false,
+    VoidCallback? onToggleVisibility,
     TextEditingController? controller,
   }) {
     return Padding(
@@ -573,7 +592,7 @@ class _SettingsPageState extends State<SettingsPage>
             child: TextField(
               controller: controller,
               readOnly: isReadOnly,
-              obscureText: isPassword,
+              obscureText: isPassword ? obscureText : false,
               style: AppTheme.bodyMedium.copyWith(
                 color: isReadOnly
                     ? AppTheme.textSecondary
@@ -589,6 +608,19 @@ class _SettingsPageState extends State<SettingsPage>
                   horizontal: 14,
                   vertical: 14,
                 ),
+                suffixIcon: isPassword && onToggleVisibility != null
+                    ? IconButton(
+                        icon: Icon(
+                          obscureText
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          size: 20,
+                          color: Colors.grey[400],
+                        ),
+                        onPressed: onToggleVisibility,
+                        splashRadius: 20,
+                      )
+                    : null,
               ),
             ),
           ),

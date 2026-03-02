@@ -36,7 +36,7 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppTheme.buildAppBar(
-        title: "My Learning",
+        title: 'My Learning',
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, size: 20),
@@ -65,14 +65,14 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
                     child: Column(
                       children: [
                         Text(
-                          "No courses yet",
+                          'No courses yet',
                           style: AppTheme.bodyMedium.copyWith(
                             color: Colors.grey[400],
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          "Pull down to refresh",
+                          'Pull down to refresh',
                           style: AppTheme.labelSmall,
                         ),
                       ],
@@ -100,13 +100,13 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
                 if (inProgress.isNotEmpty) ...[
-                  _buildSectionLabel("IN PROGRESS", inProgress.length),
+                  _buildSectionLabel('IN PROGRESS', inProgress.length),
                   const SizedBox(height: 14),
                   ...inProgress.map((c) => _buildCourseCard(c)),
                 ],
                 if (completed.isNotEmpty) ...[
                   if (inProgress.isNotEmpty) const SizedBox(height: 32),
-                  _buildSectionLabel("COMPLETED", completed.length),
+                  _buildSectionLabel('COMPLETED', completed.length),
                   const SizedBox(height: 14),
                   ...completed.map(
                     (c) => _buildCourseCard(c, isCompleted: true),
@@ -130,7 +130,7 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: AppTheme.sectionPillDecoration,
           child: Text(
-            "$count",
+            '$count',
             style: AppTheme.overline.copyWith(
               letterSpacing: 0,
               color: AppTheme.textSecondary,
@@ -148,8 +148,8 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
         double.tryParse(course['rating_avg']?.toString() ?? '0') ?? 0.0;
     final int reviewCount =
         int.tryParse(course['rating_count']?.toString() ?? '0') ?? 0;
-    final bool hasThumbnail =
-        course['thumbnail'] != null && course['thumbnail'].isNotEmpty;
+    final String? thumbnail = course['thumbnail'] as String?;
+    final bool hasThumbnail = thumbnail != null && thumbnail.isNotEmpty;
 
     return GestureDetector(
       onTap: () async {
@@ -159,6 +159,8 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
             builder: (c) => CourseDetailsPage(
               courseId: course['id'],
               title: course['title'],
+              // Pass thumbnail directly — no extra API call needed
+              thumbnailUrl: hasThumbnail ? thumbnail : null,
             ),
           ),
         );
@@ -178,7 +180,7 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
                 width: double.infinity,
                 child: hasThumbnail
                     ? Image.network(
-                        course['thumbnail'],
+                        thumbnail,
                         fit: BoxFit.cover,
                         errorBuilder: (c, e, s) => _placeholder(),
                       )
@@ -200,7 +202,7 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
 
                     const SizedBox(height: 10),
 
-                    // Rating
+                    // Rating row — tappable to reviews page
                     GestureDetector(
                       onTap: () => Navigator.push(
                         context,
@@ -237,8 +239,8 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
                           const SizedBox(width: 7),
                           Text(
                             rating > 0
-                                ? "${rating.toStringAsFixed(1)}  ·  $reviewCount review${reviewCount != 1 ? 's' : ''}"
-                                : "No reviews yet",
+                                ? '${rating.toStringAsFixed(1)}  ·  $reviewCount review${reviewCount != 1 ? 's' : ''}'
+                                : 'No reviews yet',
                             style: AppTheme.labelSmall.copyWith(
                               color: rating > 0
                                   ? Colors.blue[600]

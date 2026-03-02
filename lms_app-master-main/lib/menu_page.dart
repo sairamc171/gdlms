@@ -6,7 +6,7 @@ import 'enrolled_courses_page.dart';
 import 'profile_page.dart';
 import 'main.dart';
 import 'settings_page.dart';
-import 'dashboard_page.dart';
+import 'dashboard_page.dart'; // kept — used by Dashboard tile below
 import 'quiz_attempts_page.dart';
 
 class MenuPage extends StatefulWidget {
@@ -68,19 +68,19 @@ class _MenuPageState extends State<MenuPage> {
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text("Logout", style: AppTheme.cardTitle),
+        title: Text('Logout', style: AppTheme.cardTitle),
         content: Text(
-          "Are you sure you want to logout?",
+          'Are you sure you want to logout?',
           style: AppTheme.bodySmall,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel"),
+            child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text("Logout", style: TextStyle(color: Colors.red)),
+            child: const Text('Logout', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -144,7 +144,18 @@ class _MenuPageState extends State<MenuPage> {
             _buildMenuTile(
               context,
               icon: Icons.speed_outlined,
-              title: "Dashboard",
+              title: 'Dashboard',
+              // FIX: was incorrectly navigating to ProfilePage — now DashboardPage
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const DashboardPage()),
+              ),
+              showDivider: true,
+            ),
+            _buildMenuTile(
+              context,
+              icon: Icons.person_outline,
+              title: 'My Profile',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const ProfilePage()),
@@ -153,18 +164,8 @@ class _MenuPageState extends State<MenuPage> {
             ),
             _buildMenuTile(
               context,
-              icon: Icons.person_outline,
-              title: "My Profile",
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ProfilePage()),
-              ),
-              showDivider: true,
-            ),
-            _buildMenuTile(
-              context,
               icon: Icons.school_outlined,
-              title: "Enrolled Courses",
+              title: 'Enrolled Courses',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const EnrolledCoursesPage()),
@@ -174,7 +175,7 @@ class _MenuPageState extends State<MenuPage> {
             _buildMenuTile(
               context,
               icon: Icons.quiz_outlined,
-              title: "Quiz Attempts",
+              title: 'Quiz Attempts',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const QuizAttemptsPage()),
@@ -190,7 +191,7 @@ class _MenuPageState extends State<MenuPage> {
             _buildMenuTile(
               context,
               icon: Icons.settings_outlined,
-              title: "Settings",
+              title: 'Settings',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const SettingsPage()),
@@ -206,7 +207,7 @@ class _MenuPageState extends State<MenuPage> {
             onPressed: () => _handleLogout(context),
             icon: const Icon(Icons.logout_rounded, color: AppTheme.primary),
             label: Text(
-              "Logout",
+              'Logout',
               style: AppTheme.bodyMedium.copyWith(
                 color: AppTheme.primary,
                 fontWeight: FontWeight.w600,
@@ -299,18 +300,20 @@ class _MenuPageState extends State<MenuPage> {
         Container(
           height: 14,
           width: 120,
-          decoration: BoxDecoration(
+          // FIX: prefer_const_constructors — added const
+          decoration: const BoxDecoration(
             color: AppTheme.placeholder,
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.all(Radius.circular(4)),
           ),
         ),
         const SizedBox(height: 6),
         Container(
           height: 11,
           width: 180,
-          decoration: BoxDecoration(
+          // FIX: prefer_const_constructors — added const
+          decoration: const BoxDecoration(
             color: AppTheme.placeholder,
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.all(Radius.circular(4)),
           ),
         ),
       ],
@@ -340,7 +343,7 @@ class _MenuPageState extends State<MenuPage> {
           ),
           leading: Icon(icon, color: AppTheme.primary, size: 24),
           title: Text(title, style: AppTheme.bodyMedium),
-          trailing: Icon(
+          trailing: const Icon(
             Icons.chevron_right,
             color: AppTheme.textHint,
             size: 22,
@@ -348,7 +351,7 @@ class _MenuPageState extends State<MenuPage> {
           onTap: onTap,
         ),
         if (showDivider)
-          Divider(
+          const Divider(
             height: 1,
             thickness: 1,
             color: AppTheme.divider,
