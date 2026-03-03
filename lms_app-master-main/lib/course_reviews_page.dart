@@ -41,16 +41,15 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
     super.dispose();
   }
 
-  // ── Avatar helper — works for both "my review" and other reviews ───────────
+  // ── Avatar helper ──────────────────────────────────────────────────────────
 
-  /// Tries to get the current user's own profile photo from apiService first,
-  /// then falls back to whatever the review record contains.
+  /// Resolves the avatar URL for any review. For the current user's own review,
+  /// the live session photo is preferred over the cached review record.
   String _resolveAvatarUrl(dynamic review) {
-    final String? currentUserName = apiService.user?['user_display_name'];
-    final String displayName = (review['display_name'] as String?) ?? '';
+    // FIX: use `is_mine` flag from API instead of fragile name-string matching
+    final bool isMyReview = review['is_mine'] == true;
 
-    // If this is my review, prefer the photo from the live user session.
-    if (displayName == currentUserName) {
+    if (isMyReview) {
       final String? sessionPhoto = apiService.user?['profile_photo'] as String?;
       if (sessionPhoto != null &&
           sessionPhoto.isNotEmpty &&
@@ -59,7 +58,11 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
       }
     }
 
-    // Fallback: whatever the review API returned.
+    // Prefer avatar_url, fall back to profile_photo (both keys returned by API)
+    final String avatarUrl = (review['avatar_url'] as String?) ?? '';
+    if (avatarUrl.isNotEmpty && avatarUrl.startsWith('http')) {
+      return avatarUrl;
+    }
     return (review['profile_photo'] as String?) ?? '';
   }
 
@@ -70,11 +73,14 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
     final data = await apiService.getCourseRatings(widget.courseId);
     if (mounted && data != null) {
       final List<dynamic> allReviews = data['reviews'] ?? [];
-      final String? currentUserName = apiService.user?['user_display_name'];
+
+      // FIX: detect my review using the `is_mine` flag sent by the API,
+      // NOT by matching display name strings (which can fail silently).
       final myExistingReview = allReviews.firstWhere(
-        (r) => r['display_name'] == currentUserName,
+        (r) => r['is_mine'] == true,
         orElse: () => null,
       );
+
       setState(() {
         _reviews = allReviews;
         _myReview = myExistingReview;
@@ -126,7 +132,6 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
       bool success = await apiService.deleteReview(widget.courseId);
       if (mounted) {
         await _fetchReviews(showLoader: true);
-        // FIX 1: use `mounted` (State check) instead of `context.mounted`
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -177,7 +182,6 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
         _isSubmitting = false;
       });
       await _fetchReviews(showLoader: false);
-      // FIX 2: use `mounted` (State check) instead of `context.mounted`
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -218,7 +222,6 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
   String _getInitials(String name) {
     if (name.isEmpty) return '?';
     final parts = name.trim().split(RegExp(r'\s+'));
-    // FIX 3: wrap if-statement body in curly braces
     if (parts.length >= 2) {
       return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
     }
@@ -394,7 +397,7 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
 
                 Container(height: 1, color: AppTheme.divider),
 
-                // ── Scrollable body: reviews + write/delete section ────
+                // ── Scrollable body ────────────────────────────────
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: () => _fetchReviews(showLoader: false),
@@ -443,9 +446,9 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
                           final String date = _formatDate(
                             r['comment_date'] ?? '',
                           );
-                          final bool isMyReview =
-                              r['display_name'] ==
-                              apiService.user?['user_display_name'];
+
+                          // FIX: use `is_mine` from API, not name-string matching
+                          final bool isMyReview = r['is_mine'] == true;
 
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 10),
@@ -567,7 +570,7 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
 
                         const SizedBox(height: 8),
 
-                        // ── Write a Review OR Delete My Review ────────
+                        // ── Write a Review OR Delete My Review ──────
                         if (_myReview == null)
                           _buildWriteReviewSection()
                         else
@@ -691,7 +694,6 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
               ),
               onPressed: _isSubmitting ? null : _handleSubmitReview,
               child: _isSubmitting
-                  // FIX 4: added const
                   ? const SizedBox(
                       height: 20,
                       width: 20,
@@ -720,7 +722,6 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
       height: 52,
       child: OutlinedButton.icon(
         onPressed: _handleDeleteReview,
-        // FIX 5: added const
         icon: const Icon(
           Icons.delete_outline_rounded,
           size: 18,
