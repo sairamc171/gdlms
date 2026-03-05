@@ -4,13 +4,13 @@ import 'app_theme.dart';
 import 'lesson_player_page.dart';
 import 'quiz_intro_page.dart';
 import 'services/api_service.dart';
+import 'course_details_page.dart';
 
 class QuizResultPage extends StatefulWidget {
   final int totalQuestions;
   final int correctAnswers;
   final List<int> allLessonIds;
   final int currentQuizId;
-  final VoidCallback? onBackToLesson;
 
   const QuizResultPage({
     super.key,
@@ -18,7 +18,6 @@ class QuizResultPage extends StatefulWidget {
     required this.correctAnswers,
     this.allLessonIds = const [],
     this.currentQuizId = 0,
-    this.onBackToLesson,
   });
 
   @override
@@ -30,6 +29,8 @@ class _QuizResultPageState extends State<QuizResultPage>
   late AnimationController _controller;
   late Animation<double> _scoreAnim, _fadeAnim;
   late Animation<Offset> _slideAnim;
+
+  bool _isNavigating = false;
 
   @override
   void initState() {
@@ -62,58 +63,103 @@ class _QuizResultPageState extends State<QuizResultPage>
     super.dispose();
   }
 
+  // ── Adjacent item IDs ──────────────────────────────────────────────────────
+
   int? get _previousId {
     if (widget.allLessonIds.isEmpty || widget.currentQuizId == 0) return null;
     final idx = widget.allLessonIds.indexOf(widget.currentQuizId);
-    if (idx > 0) return widget.allLessonIds[idx - 1];
-    return null;
+    if (idx <= 0) return null;
+    return widget.allLessonIds[idx - 1];
   }
 
   int? get _nextId {
     if (widget.allLessonIds.isEmpty || widget.currentQuizId == 0) return null;
     final idx = widget.allLessonIds.indexOf(widget.currentQuizId);
-    if (idx >= 0 && idx < widget.allLessonIds.length - 1) {
-      return widget.allLessonIds[idx + 1];
-    }
-
-    return null;
+    if (idx < 0 || idx >= widget.allLessonIds.length - 1) return null;
+    return widget.allLessonIds[idx + 1];
   }
 
-  Future<void> _navigateTo(int id) async {
-    if (!mounted) return;
-    final data = await apiService.getLessonDetails(id);
-    if (!mounted || data == null) return;
-    if (data['type'] == 'quiz') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (c) => QuizIntroPage(
-            quizId: data['id'],
-            quizTitle: data['title'],
-            allLessonIds: widget.allLessonIds,
+  // ── Navigation ─────────────────────────────────────────────────────────────
+
+  /// Navigate to a lesson or quiz by id.
+  /// Uses cache first, falls back to API. Shows error on failure.
+  Future<void> _navigateToId(int targetId) async {
+    if (_isNavigating || !mounted) return;
+    setState(() => _isNavigating = true);
+
+    try {
+      Map<String, dynamic>? data = LessonCache.get(targetId);
+      data ??= await apiService.getLessonDetails(targetId);
+
+      if (!mounted) return;
+
+      if (data == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not load content. Please try again.'),
+            behavior: SnackBarBehavior.floating,
           ),
-        ),
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (c) => LessonPlayerPage(
-            lessonId: data['id'],
-            allLessonIds: widget.allLessonIds,
+        );
+        return;
+      }
+
+      LessonCache.put(targetId, data);
+      final String type = data['type']?.toString() ?? '';
+      final bool isQuiz = type == 'tutor_quiz' || type == 'quiz';
+
+      if (isQuiz) {
+        // Check for existing attempts to decide: QuizIntroPage
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (c) => QuizIntroPage(
+              quizId: targetId,
+              quizTitle: data!['title']?.toString() ?? 'Quiz',
+              allLessonIds: widget.allLessonIds,
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (c) => LessonPlayerPage(
+              lessonId: targetId,
+              allLessonIds: widget.allLessonIds,
+              initialData: data,
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isNavigating = false);
     }
   }
 
-  void _goToLessonPlayer() {
-    if (widget.onBackToLesson != null) {
-      widget.onBackToLesson!();
-    } else {
-      Navigator.pop(context);
-    }
+  /// Back to Course Details page
+  void _backToCourse() {
+    Navigator.popUntil(
+      context,
+      (route) =>
+          route.settings.name == CourseDetailsPage.routeName || route.isFirst,
+    );
   }
+
+  /// Retry: go back to QuizIntroPage for this quiz
+  void _retryQuiz() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (c) => QuizIntroPage(
+          quizId: widget.currentQuizId,
+          quizTitle: 'Quiz',
+          allLessonIds: widget.allLessonIds,
+        ),
+      ),
+    );
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -127,7 +173,7 @@ class _QuizResultPageState extends State<QuizResultPage>
 
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppTheme.buildAppBar(title: "Results"),
+      appBar: AppTheme.buildAppBar(title: 'Results'),
       body: SafeArea(
         child: isLandscape
             ? _buildLandscapeBody(percent, isPassed, percentInt)
@@ -225,14 +271,14 @@ class _QuizResultPageState extends State<QuizResultPage>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  "${(_scoreAnim.value * percentInt).toInt()}%",
+                  '${(_scoreAnim.value * percentInt).toInt()}%',
                   style: AppTheme.headingLarge.copyWith(
                     fontSize: size * 0.22,
                     color: AppTheme.textPrimary,
                   ),
                 ),
                 Text(
-                  isPassed ? "Passed" : "Failed",
+                  isPassed ? 'Passed' : 'Failed',
                   style: AppTheme.labelSmall.copyWith(
                     color: color,
                     fontWeight: FontWeight.w700,
@@ -252,24 +298,24 @@ class _QuizResultPageState extends State<QuizResultPage>
       children: [
         Expanded(
           child: _StatCard(
-            label: "Correct",
-            value: "${widget.correctAnswers}",
+            label: 'Correct',
+            value: '${widget.correctAnswers}',
             color: AppTheme.completed,
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
           child: _StatCard(
-            label: "Wrong",
-            value: "${widget.totalQuestions - widget.correctAnswers}",
+            label: 'Wrong',
+            value: '${widget.totalQuestions - widget.correctAnswers}',
             color: Colors.red[700]!,
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
           child: _StatCard(
-            label: "Total",
-            value: "${widget.totalQuestions}",
+            label: 'Total',
+            value: '${widget.totalQuestions}',
             color: AppTheme.primary,
           ),
         ),
@@ -278,11 +324,13 @@ class _QuizResultPageState extends State<QuizResultPage>
   }
 
   Widget _buttons(bool isPassed, {double buttonHeight = 52}) {
-    final hasPrev = _previousId != null;
-    final hasNext = _nextId != null;
+    final hasPrev = _previousId != null && !_isNavigating;
+    final hasNext = _nextId != null && !_isNavigating;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Retry button (only when failed)
         if (!isPassed) ...[
           ElevatedButton.icon(
             icon: const Icon(
@@ -291,7 +339,7 @@ class _QuizResultPageState extends State<QuizResultPage>
               size: 20,
             ),
             label: Text(
-              "Retry Quiz",
+              'Retry Quiz',
               style: AppTheme.bodyMedium.copyWith(
                 color: AppTheme.surface,
                 fontWeight: FontWeight.w600,
@@ -305,18 +353,20 @@ class _QuizResultPageState extends State<QuizResultPage>
               ),
               elevation: 0,
             ),
-            onPressed: () => Navigator.pop(context, 'retake'),
+            onPressed: _retryQuiz,
           ),
           const SizedBox(height: 10),
         ],
+
+        // Back to Course
         OutlinedButton.icon(
           icon: const Icon(
-            Icons.arrow_back_rounded,
+            Icons.home_outlined,
             color: AppTheme.primary,
             size: 20,
           ),
           label: Text(
-            "Back to Lesson",
+            'Back to Course',
             style: AppTheme.bodyMedium.copyWith(
               color: AppTheme.primary,
               fontWeight: FontWeight.w600,
@@ -329,17 +379,20 @@ class _QuizResultPageState extends State<QuizResultPage>
             ),
             side: const BorderSide(color: AppTheme.primary, width: 1.5),
           ),
-          onPressed: _goToLessonPlayer,
+          onPressed: _backToCourse,
         ),
+
         const SizedBox(height: 10),
+
+        // Previous / Next
         Row(
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: hasPrev ? () => _navigateTo(_previousId!) : null,
+                onPressed: hasPrev ? () => _navigateToId(_previousId!) : null,
                 icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 13),
                 label: Text(
-                  "Previous",
+                  'Previous',
                   style: AppTheme.labelMedium.copyWith(
                     fontWeight: FontWeight.w600,
                     color: hasPrev ? AppTheme.primary : Colors.grey[350],
@@ -363,11 +416,11 @@ class _QuizResultPageState extends State<QuizResultPage>
             const SizedBox(width: 10),
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: hasNext ? () => _navigateTo(_nextId!) : null,
+                onPressed: hasNext ? () => _navigateToId(_nextId!) : null,
                 icon: const Icon(Icons.arrow_forward_ios_rounded, size: 13),
                 iconAlignment: IconAlignment.end,
                 label: Text(
-                  "Next",
+                  'Next',
                   style: AppTheme.labelMedium.copyWith(
                     fontWeight: FontWeight.w600,
                     color: hasNext ? AppTheme.primary : Colors.grey[350],
@@ -395,14 +448,18 @@ class _QuizResultPageState extends State<QuizResultPage>
   }
 }
 
+// ── Supporting widgets ─────────────────────────────────────────────────────
+
 class _StatCard extends StatelessWidget {
   final String label, value;
   final Color color;
+
   const _StatCard({
     required this.label,
     required this.value,
     required this.color,
   });
+
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
@@ -427,12 +484,15 @@ class _StatCard extends StatelessWidget {
 class _ScoreRingPainter extends CustomPainter {
   final double progress;
   final bool isPassed;
+
   _ScoreRingPainter({required this.progress, required this.isPassed});
+
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = (size.width - 20) / 2;
     const strokeWidth = 12.0;
+
     canvas.drawCircle(
       center,
       radius,

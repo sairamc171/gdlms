@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'app_theme.dart';
-import '../services/api_service.dart';
+import 'services/api_service.dart';
 import 'quiz_taking_page.dart';
-import 'quiz_result_page.dart' as results;
+import 'quiz_result_page.dart';
 import 'course_details_page.dart';
 
 class QuizIntroPage extends StatefulWidget {
   final int quizId;
   final String quizTitle;
   final List<int> allLessonIds;
+
   const QuizIntroPage({
     super.key,
     required this.quizId,
@@ -26,6 +27,7 @@ class _QuizIntroPageState extends State<QuizIntroPage>
   bool _hasPreviousAttempt = false;
   bool _isPassed = false;
   Map<String, dynamic>? _latestAttempt;
+
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
@@ -58,6 +60,10 @@ class _QuizIntroPageState extends State<QuizIntroPage>
     super.dispose();
   }
 
+  // When returning from QuizTakingPage via back button, refresh attempt state
+  @override
+  void didPopNext() => _checkAttempts();
+
   Future<void> _checkAttempts() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
@@ -68,6 +74,7 @@ class _QuizIntroPageState extends State<QuizIntroPage>
         return ['finished', 'passed', 'failed'].contains(status) &&
             _parseDouble(a['total_marks']) > 0;
       }).toList();
+
       if (!mounted) return;
       if (completed.isNotEmpty) {
         final latest = completed.first;
@@ -85,41 +92,33 @@ class _QuizIntroPageState extends State<QuizIntroPage>
         setState(() {
           _hasPreviousAttempt = false;
           _isPassed = false;
+          _latestAttempt = null;
           _isLoading = false;
         });
       }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
     }
-    if (!mounted) return;
-    _animController.forward(from: 0);
+    if (mounted) _animController.forward(from: 0);
   }
 
+  // Navigate to result page for the latest attempt
   void _showResults() {
+    if (_latestAttempt == null) return;
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (c) => results.QuizResultPage(
+        builder: (c) => QuizResultPage(
           totalQuestions: _parseInt(_latestAttempt!['total_questions']),
           correctAnswers: _parseInt(_latestAttempt!['total_correct']),
           allLessonIds: widget.allLessonIds,
           currentQuizId: widget.quizId,
-          onBackToLesson: () {
-            int count = 0;
-            Navigator.of(context).popUntil((_) => count++ >= 2);
-          },
         ),
       ),
-    ).then((res) {
-      if (res == 'retake') {
-        _startQuiz();
-      } else {
-        _checkAttempts();
-      }
-    });
+    );
   }
 
+  // Start / retake quiz — push QuizTakingPage, refresh on return
   Future<void> _startQuiz() async {
     await Navigator.push(
       context,
@@ -130,6 +129,7 @@ class _QuizIntroPageState extends State<QuizIntroPage>
         ),
       ),
     );
+    // Refresh after returning (back button or quiz completion → back)
     if (mounted) _checkAttempts();
   }
 
@@ -278,7 +278,7 @@ class _QuizIntroPageState extends State<QuizIntroPage>
             ),
             const SizedBox(width: 6),
             Text(
-              "Last score: ${scorePercent.toInt()}%",
+              'Last score: ${scorePercent.toInt()}%',
               style: AppTheme.labelMedium.copyWith(
                 color: color,
                 fontWeight: FontWeight.w600,
@@ -296,14 +296,14 @@ class _QuizIntroPageState extends State<QuizIntroPage>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _OutlineBtn(
-            label: "View Results",
+            label: 'View Results',
             icon: Icons.bar_chart_rounded,
             height: buttonHeight,
             onPressed: _showResults,
           ),
           const SizedBox(height: 12),
           _PrimaryBtn(
-            label: "Retake Quiz",
+            label: 'Retake Quiz',
             icon: Icons.replay_rounded,
             height: buttonHeight,
             onPressed: _startQuiz,
@@ -312,7 +312,7 @@ class _QuizIntroPageState extends State<QuizIntroPage>
       );
     }
     return _PrimaryBtn(
-      label: _hasPreviousAttempt ? "Try Again" : "Start Quiz",
+      label: _hasPreviousAttempt ? 'Try Again' : 'Start Quiz',
       icon: _hasPreviousAttempt
           ? Icons.replay_rounded
           : Icons.play_arrow_rounded,
@@ -325,17 +325,21 @@ class _QuizIntroPageState extends State<QuizIntroPage>
   int _parseInt(dynamic v) => int.tryParse(v?.toString() ?? '0') ?? 0;
 }
 
+// ── Reusable button widgets ────────────────────────────────────────────────
+
 class _PrimaryBtn extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback onPressed;
   final double height;
+
   const _PrimaryBtn({
     required this.label,
     required this.icon,
     required this.onPressed,
     this.height = 52,
   });
+
   @override
   Widget build(BuildContext context) => ElevatedButton.icon(
     icon: Icon(icon, color: AppTheme.surface, size: 20),
@@ -361,12 +365,14 @@ class _OutlineBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
   final double height;
+
   const _OutlineBtn({
     required this.label,
     required this.icon,
     required this.onPressed,
     this.height = 52,
   });
+
   @override
   Widget build(BuildContext context) => OutlinedButton.icon(
     icon: Icon(icon, color: AppTheme.primary, size: 20),

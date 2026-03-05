@@ -156,10 +156,13 @@ class _EnrolledCoursesPageState extends State<EnrolledCoursesPage> {
         await Navigator.push(
           context,
           MaterialPageRoute(
+            // RouteSettings name allows pushAndRemoveUntil in quiz/lesson
+            // pages to stop exactly at CourseDetailsPage, not pop all the
+            // way back to EnrolledCoursesPage.
+            settings: const RouteSettings(name: CourseDetailsPage.routeName),
             builder: (c) => CourseDetailsPage(
               courseId: course['id'],
               title: course['title'],
-              // Pass thumbnail directly — no extra API call needed
               thumbnailUrl: hasThumbnail ? thumbnail : null,
             ),
           ),

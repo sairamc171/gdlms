@@ -24,7 +24,6 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
   int _ratingCount = 0;
   bool _isLoading = true;
 
-  // Inline write-a-review state
   double _selectedRating = 5.0;
   final TextEditingController _commentController = TextEditingController();
   bool _isSubmitting = false;
@@ -43,12 +42,8 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
 
   // ── Avatar helper ──────────────────────────────────────────────────────────
 
-  /// Resolves the avatar URL for any review. For the current user's own review,
-  /// the live session photo is preferred over the cached review record.
   String _resolveAvatarUrl(dynamic review) {
-    // FIX: use `is_mine` flag from API instead of fragile name-string matching
     final bool isMyReview = review['is_mine'] == true;
-
     if (isMyReview) {
       final String? sessionPhoto = apiService.user?['profile_photo'] as String?;
       if (sessionPhoto != null &&
@@ -57,12 +52,8 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
         return sessionPhoto;
       }
     }
-
-    // Prefer avatar_url, fall back to profile_photo (both keys returned by API)
     final String avatarUrl = (review['avatar_url'] as String?) ?? '';
-    if (avatarUrl.isNotEmpty && avatarUrl.startsWith('http')) {
-      return avatarUrl;
-    }
+    if (avatarUrl.isNotEmpty && avatarUrl.startsWith('http')) return avatarUrl;
     return (review['profile_photo'] as String?) ?? '';
   }
 
@@ -73,14 +64,10 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
     final data = await apiService.getCourseRatings(widget.courseId);
     if (mounted && data != null) {
       final List<dynamic> allReviews = data['reviews'] ?? [];
-
-      // FIX: detect my review using the `is_mine` flag sent by the API,
-      // NOT by matching display name strings (which can fail silently).
       final myExistingReview = allReviews.firstWhere(
         (r) => r['is_mine'] == true,
         orElse: () => null,
       );
-
       setState(() {
         _reviews = allReviews;
         _myReview = myExistingReview;
@@ -129,7 +116,7 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
 
     if (confirm == true) {
       setState(() => _isLoading = true);
-      bool success = await apiService.deleteReview(widget.courseId);
+      final bool success = await apiService.deleteReview(widget.courseId);
       if (mounted) {
         await _fetchReviews(showLoader: true);
         if (mounted) {
@@ -169,7 +156,7 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
       return;
     }
     setState(() => _isSubmitting = true);
-    bool success = await apiService.submitReview(
+    final bool success = await apiService.submitReview(
       widget.courseId,
       _selectedRating,
       _commentController.text,
@@ -330,263 +317,286 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     return Scaffold(
       backgroundColor: AppTheme.background,
+      // Scaffold shrinks its body when keyboard opens.
+      // Combined with a single-ListView landscape layout, nothing overflows.
+      resizeToAvoidBottomInset: true,
       appBar: AppTheme.buildAppBar(title: 'Reviews'),
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: AppTheme.primary),
             )
-          : Column(
+          : isLandscape
+          ? _buildLandscapeBody()
+          : _buildPortraitBody(),
+    );
+  }
+
+  // ── Portrait: pinned header + scrollable list ──────────────────────────────
+
+  Widget _buildPortraitBody() {
+    return Column(
+      children: [
+        _buildSummaryHeader(),
+        Container(height: 1, color: AppTheme.divider),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () => _fetchReviews(showLoader: false),
+            color: AppTheme.primary,
+            child: ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+              children: _buildListContent(compact: false),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Landscape: ONE big scrollable — header scrolls too ────────────────────
+  //
+  // Root cause of the overflow: in landscape the AppBar (~56 px) + keyboard
+  // (~260 px) can leave as little as 60 px of body height. A Column with a
+  // pinned summary header (≈ 90 px) + Expanded ListView has zero room.
+  // Solution: remove the pinned header entirely in landscape and let the whole
+  // page scroll as a single ListView. The keyboard simply scrolls content up.
+
+  Widget _buildLandscapeBody() {
+    return RefreshIndicator(
+      onRefresh: () => _fetchReviews(showLoader: false),
+      color: AppTheme.primary,
+      child: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: [
+          _buildSummaryHeader(compact: true),
+          const SizedBox(height: 8),
+          Container(height: 1, color: AppTheme.divider),
+          const SizedBox(height: 12),
+          ..._buildListContent(compact: true),
+        ],
+      ),
+    );
+  }
+
+  // ── Shared review list + write/delete widget ───────────────────────────────
+
+  List<Widget> _buildListContent({required bool compact}) {
+    return [
+      if (_reviews.isEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 32, bottom: 24),
+          child: Center(
+            child: Column(
               children: [
-                // ── Rating summary header ──────────────────────────
-                Container(
-                  color: AppTheme.surface,
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                Icon(
+                  Icons.rate_review_outlined,
+                  size: 52,
+                  color: Colors.grey[300],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'No reviews yet',
+                  style: AppTheme.bodyMedium.copyWith(color: Colors.grey[400]),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Be the first to share your thoughts',
+                  style: AppTheme.labelSmall,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ..._reviews.map((r) => _buildReviewCard(r)),
+      const SizedBox(height: 8),
+      if (_myReview == null)
+        _buildWriteReviewSection(compact: compact)
+      else
+        _buildDeleteReviewSection(),
+    ];
+  }
+
+  // ── Rating summary header ──────────────────────────────────────────────────
+
+  Widget _buildSummaryHeader({bool compact = false}) {
+    return Container(
+      color: AppTheme.surface,
+      padding: EdgeInsets.symmetric(
+        horizontal: 24,
+        vertical: compact ? 10 : 16,
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Score + stars
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _ratingAvg.toStringAsFixed(1),
+                  style: GoogleFonts.poppins(
+                    fontSize: compact ? 36 : 48,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary,
+                    height: 1.0,
+                    letterSpacing: -2,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                _buildStars(_ratingAvg, size: compact ? 14 : 18),
+                const SizedBox(height: 4),
+                Text(
+                  '$_ratingCount review${_ratingCount != 1 ? 's' : ''}',
+                  style: AppTheme.labelSmall,
+                ),
+              ],
+            ),
+            const SizedBox(width: 20),
+            const VerticalDivider(
+              width: 1,
+              thickness: 1,
+              color: AppTheme.divider,
+            ),
+            const SizedBox(width: 20),
+            // Title
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Course Rating',
+                    style: AppTheme.overline.copyWith(letterSpacing: 1.2),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    widget.courseTitle,
+                    style: AppTheme.cardTitle,
+                    maxLines: compact ? 2 : 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Review card ────────────────────────────────────────────────────────────
+
+  Widget _buildReviewCard(dynamic r) {
+    final double reviewRating = double.tryParse(r['rating'].toString()) ?? 0.0;
+    final String displayName = (r['display_name'] as String?) ?? 'Student';
+    final String content = (r['comment_content'] as String?) ?? '';
+    final String date = _formatDate(r['comment_date'] ?? '');
+    final bool isMyReview = r['is_mine'] == true;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: isMyReview
+              ? Border.all(
+                  color: AppTheme.primary.withValues(alpha: 0.2),
+                  width: 1.5,
+                )
+              : null,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _buildReviewerAvatar(r),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
+                      Row(
                         children: [
-                          Text(
-                            _ratingAvg.toStringAsFixed(1),
-                            style: GoogleFonts.poppins(
-                              fontSize: 52,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.textPrimary,
-                              height: 1.0,
-                              letterSpacing: -2,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          _buildStars(_ratingAvg, size: 18),
-                          const SizedBox(height: 4),
-                          Text(
-                            '$_ratingCount review${_ratingCount != 1 ? 's' : ''}',
-                            style: AppTheme.labelSmall,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 24),
-                      Container(width: 1, height: 72, color: AppTheme.divider),
-                      const SizedBox(width: 24),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Course Rating',
-                              style: AppTheme.overline.copyWith(
-                                letterSpacing: 1.2,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              widget.courseTitle,
-                              style: AppTheme.cardTitle,
-                              maxLines: 3,
+                          Expanded(
+                            child: Text(
+                              displayName,
+                              style: AppTheme.cardTitle.copyWith(fontSize: 14),
                               overflow: TextOverflow.ellipsis,
                             ),
-                          ],
-                        ),
+                          ),
+                          if (isMyReview)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                'You',
+                                style: AppTheme.labelSmall.copyWith(
+                                  color: AppTheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          _buildStars(reviewRating, size: 13),
+                          const SizedBox(width: 8),
+                          Text(date, style: AppTheme.labelSmall),
+                        ],
                       ),
                     ],
                   ),
                 ),
-
-                Container(height: 1, color: AppTheme.divider),
-
-                // ── Scrollable body ────────────────────────────────
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: () => _fetchReviews(showLoader: false),
-                    color: AppTheme.primary,
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                      children: [
-                        // Empty state
-                        if (_reviews.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 48, bottom: 32),
-                            child: Center(
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    Icons.rate_review_outlined,
-                                    size: 52,
-                                    color: Colors.grey[300],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'No reviews yet',
-                                    style: AppTheme.bodyMedium.copyWith(
-                                      color: Colors.grey[400],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Be the first to share your thoughts',
-                                    style: AppTheme.labelSmall,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                        // Review cards
-                        ...List.generate(_reviews.length, (index) {
-                          final r = _reviews[index];
-                          final double reviewRating =
-                              double.tryParse(r['rating'].toString()) ?? 0.0;
-                          final String displayName =
-                              (r['display_name'] as String?) ?? 'Student';
-                          final String content =
-                              (r['comment_content'] as String?) ?? '';
-                          final String date = _formatDate(
-                            r['comment_date'] ?? '',
-                          );
-
-                          // FIX: use `is_mine` from API, not name-string matching
-                          final bool isMyReview = r['is_mine'] == true;
-
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: AppTheme.surface,
-                                borderRadius: BorderRadius.circular(16),
-                                border: isMyReview
-                                    ? Border.all(
-                                        color: AppTheme.primary.withValues(
-                                          alpha: 0.2,
-                                        ),
-                                        width: 1.5,
-                                      )
-                                    : null,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.04),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 3),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    children: [
-                                      _buildReviewerAvatar(r),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    displayName,
-                                                    style: AppTheme.cardTitle
-                                                        .copyWith(fontSize: 14),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                                if (isMyReview)
-                                                  Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 7,
-                                                          vertical: 2,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: AppTheme.primary
-                                                          .withValues(
-                                                            alpha: 0.1,
-                                                          ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            20,
-                                                          ),
-                                                    ),
-                                                    child: Text(
-                                                      'You',
-                                                      style: AppTheme.labelSmall
-                                                          .copyWith(
-                                                            color: AppTheme
-                                                                .primary,
-                                                            fontWeight:
-                                                                FontWeight.w600,
-                                                          ),
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Row(
-                                              children: [
-                                                _buildStars(
-                                                  reviewRating,
-                                                  size: 13,
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Text(
-                                                  date,
-                                                  style: AppTheme.labelSmall,
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  if (content.isNotEmpty) ...[
-                                    const SizedBox(height: 12),
-                                    const Divider(
-                                      height: 1,
-                                      color: AppTheme.divider,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      content,
-                                      style: AppTheme.bodySmall.copyWith(
-                                        color: AppTheme.textSecondary,
-                                        height: 1.6,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          );
-                        }),
-
-                        const SizedBox(height: 8),
-
-                        // ── Write a Review OR Delete My Review ──────
-                        if (_myReview == null)
-                          _buildWriteReviewSection()
-                        else
-                          _buildDeleteReviewSection(),
-                      ],
-                    ),
-                  ),
-                ),
               ],
             ),
+            if (content.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Divider(height: 1, color: AppTheme.divider),
+              const SizedBox(height: 12),
+              Text(
+                content,
+                style: AppTheme.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                  height: 1.6,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
-  // ── Inline write-a-review card ─────────────────────────────────────────────
+  // ── Write-a-review card ────────────────────────────────────────────────────
 
-  Widget _buildWriteReviewSection() {
+  Widget _buildWriteReviewSection({bool compact = false}) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -604,117 +614,149 @@ class _CourseReviewsPageState extends State<CourseReviewsPage> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.edit_outlined,
-                size: 18,
-                color: AppTheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Write a Review',
-                style: AppTheme.headingMedium.copyWith(fontSize: 16),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            widget.courseTitle,
-            style: AppTheme.labelSmall,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+      child: compact
+          ? _buildWriteReviewLandscape()
+          : _buildWriteReviewPortrait(),
+    );
+  }
 
-          const SizedBox(height: 16),
+  Widget _buildWriteReviewPortrait() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _reviewFormHeader(),
+        const SizedBox(height: 16),
+        _starSelector(horizontal: true),
+        const SizedBox(height: 16),
+        _commentField(minLines: 4),
+        const SizedBox(height: 16),
+        _submitButton(),
+      ],
+    );
+  }
 
-          // Star selector
-          Center(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(5, (index) {
-                final filled = index < _selectedRating;
-                return GestureDetector(
-                  onTap: () => setState(() => _selectedRating = index + 1.0),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Icon(
-                      filled ? Icons.star_rounded : Icons.star_outline_rounded,
-                      color: filled ? Colors.amber[500] : Colors.grey[300],
-                      size: 36,
-                    ),
-                  ),
-                );
-              }),
+  // Landscape: header → stars (horizontal row) → text field → button
+  // All stacked vertically, same as portrait but with reduced spacing/minLines
+  Widget _buildWriteReviewLandscape() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _reviewFormHeader(),
+        const SizedBox(height: 12),
+        _starSelector(horizontal: true),
+        const SizedBox(height: 12),
+        _commentField(minLines: 2),
+        const SizedBox(height: 12),
+        _submitButton(),
+      ],
+    );
+  }
+
+  Widget _reviewFormHeader() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.edit_outlined, size: 18, color: AppTheme.primary),
+            const SizedBox(width: 8),
+            Text(
+              'Write a Review',
+              style: AppTheme.headingMedium.copyWith(fontSize: 16),
             ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          widget.courseTitle,
+          style: AppTheme.labelSmall,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+
+  Widget _starSelector({required bool horizontal}) {
+    final stars = List.generate(5, (index) {
+      final filled = index < _selectedRating;
+      return GestureDetector(
+        onTap: () => setState(() => _selectedRating = index + 1.0),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Icon(
+            filled ? Icons.star_rounded : Icons.star_outline_rounded,
+            color: filled ? Colors.amber[500] : Colors.grey[300],
+            size: 32,
           ),
+        ),
+      );
+    });
 
-          const SizedBox(height: 16),
+    return horizontal
+        ? Row(mainAxisAlignment: MainAxisAlignment.start, children: stars)
+        : Column(mainAxisAlignment: MainAxisAlignment.center, children: stars);
+  }
 
-          // Comment field
-          Container(
-            decoration: BoxDecoration(
-              color: AppTheme.background,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.divider),
-            ),
-            child: TextField(
-              controller: _commentController,
-              style: AppTheme.bodyMedium,
-              maxLines: 4,
-              decoration: InputDecoration(
-                hintText: 'Share your experience with this course...',
-                hintStyle: AppTheme.bodyMedium.copyWith(
-                  color: AppTheme.textHint,
-                ),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.all(14),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Submit button
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _isSubmitting
-                    ? AppTheme.placeholder
-                    : AppTheme.primary,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onPressed: _isSubmitting ? null : _handleSubmitReview,
-              child: _isSubmitting
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        color: AppTheme.surface,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : Text(
-                      'Post Review',
-                      style: AppTheme.bodyMedium.copyWith(
-                        color: AppTheme.surface,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-            ),
-          ),
-        ],
+  Widget _commentField({int minLines = 4}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.divider),
+      ),
+      child: TextField(
+        controller: _commentController,
+        style: AppTheme.bodyMedium,
+        minLines: minLines,
+        maxLines: null,
+        textInputAction: TextInputAction.newline,
+        decoration: InputDecoration(
+          hintText: 'Share your experience with this course...',
+          hintStyle: AppTheme.bodyMedium.copyWith(color: AppTheme.textHint),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.all(14),
+        ),
       ),
     );
   }
+
+  Widget _submitButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _isSubmitting
+              ? AppTheme.placeholder
+              : AppTheme.primary,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        onPressed: _isSubmitting ? null : _handleSubmitReview,
+        child: _isSubmitting
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                  color: AppTheme.surface,
+                  strokeWidth: 2,
+                ),
+              )
+            : Text(
+                'Post Review',
+                style: AppTheme.bodyMedium.copyWith(
+                  color: AppTheme.surface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+      ),
+    );
+  }
+
+  // ── Delete section ─────────────────────────────────────────────────────────
 
   Widget _buildDeleteReviewSection() {
     return SizedBox(

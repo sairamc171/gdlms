@@ -7,6 +7,7 @@ import 'quiz_result_page.dart';
 class QuizTakingPage extends StatefulWidget {
   final int quizId;
   final List<int> allLessonIds;
+
   const QuizTakingPage({
     super.key,
     required this.quizId,
@@ -24,6 +25,7 @@ class _QuizTakingPageState extends State<QuizTakingPage>
   int? _selectedOptionHash;
   int _correctAnswersCount = 0;
   bool _isSubmitting = false;
+
   late AnimationController _questionAnimController;
   late Animation<double> _questionFade;
   late Animation<Offset> _questionSlide;
@@ -58,56 +60,45 @@ class _QuizTakingPageState extends State<QuizTakingPage>
 
   void _animateNextQuestion() => _questionAnimController.forward(from: 0);
 
-  void _resetQuiz() {
-    setState(() {
-      _currentIndex = 0;
-      _selectedOptionHash = null;
-      _correctAnswersCount = 0;
-      _isSubmitting = false;
-      _loadQuizFuture = apiService.getQuizQuestions(widget.quizId);
-    });
-    _questionAnimController.forward(from: 0);
-  }
+  // ── Finish quiz ────────────────────────────────────────────────────────────
 
   Future<void> _handleFinish(int totalQuestions) async {
+    if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
+
+    // Sync result to server
     await apiService.syncLessonWithWebsite(
       widget.quizId,
       itemType: 'quiz',
       earnedMarks: _correctAnswersCount,
     );
+
     if (!mounted) return;
-    final dynamic quizResult = await Navigator.push(
+
+    // Push QuizResultPage. When user taps "Back to Course" there,
+    // it pops back to QuizIntroPage (which is where we came from).
+    // QuizIntroPage.didPopNext() will then refresh attempt state automatically.
+    await Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (context) => QuizResultPage(
+        builder: (c) => QuizResultPage(
           totalQuestions: totalQuestions,
           correctAnswers: _correctAnswersCount,
           allLessonIds: widget.allLessonIds,
           currentQuizId: widget.quizId,
-          onBackToLesson: () {
-            int count = 0;
-            Navigator.of(context).popUntil((_) => count++ >= 3);
-          },
         ),
       ),
     );
-    if (mounted) {
-      if (quizResult == 'retake') {
-        _resetQuiz();
-      } else {
-        Navigator.pop(context, quizResult ?? false);
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
+
     return Scaffold(
       backgroundColor: AppTheme.surface,
-      appBar: AppTheme.buildAppBar(title: "Quiz"),
+      appBar: AppTheme.buildAppBar(title: 'Quiz'),
       body: FutureBuilder<List<QuizQuestion>>(
         future: _loadQuizFuture,
         builder: (context, snapshot) {
@@ -119,16 +110,18 @@ class _QuizTakingPageState extends State<QuizTakingPage>
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return Center(
               child: Text(
-                "Could not load questions.",
+                'Could not load questions.',
                 style: AppTheme.bodyMedium.copyWith(
                   color: AppTheme.textSecondary,
                 ),
               ),
             );
           }
+
           final questions = snapshot.data!;
           final currentQuestion = questions[_currentIndex];
           final progress = (_currentIndex + 1) / questions.length;
+
           return SafeArea(
             child: isLandscape
                 ? _buildLandscapeLayout(questions, currentQuestion, progress)
@@ -237,14 +230,14 @@ class _QuizTakingPageState extends State<QuizTakingPage>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                "Question ${_currentIndex + 1} of ${questions.length}",
+                'Question ${_currentIndex + 1} of ${questions.length}',
                 style: AppTheme.overline.copyWith(
                   letterSpacing: 0.5,
                   color: AppTheme.textSecondary,
                 ),
               ),
               Text(
-                "${(progress * 100).toInt()}%",
+                '${(progress * 100).toInt()}%',
                 style: AppTheme.labelSmall.copyWith(
                   color: AppTheme.primary,
                   fontWeight: FontWeight.w700,
@@ -294,6 +287,7 @@ class _QuizTakingPageState extends State<QuizTakingPage>
   }) {
     final isLast = _currentIndex == questions.length - 1;
     final enabled = _selectedOptionHash != null && !_isSubmitting;
+
     return Padding(
       padding: EdgeInsets.fromLTRB(20, compact ? 4 : 8, 20, compact ? 12 : 28),
       child: Container(
@@ -327,6 +321,7 @@ class _QuizTakingPageState extends State<QuizTakingPage>
                       (o) => o.text.hashCode == _selectedOptionHash,
                     );
                     if (selected.isCorrect) _correctAnswersCount++;
+
                     if (_currentIndex < questions.length - 1) {
                       setState(() {
                         _currentIndex++;
@@ -334,7 +329,7 @@ class _QuizTakingPageState extends State<QuizTakingPage>
                       });
                       _animateNextQuestion();
                     } else {
-                      _handleFinish(questions.length);
+                      await _handleFinish(questions.length);
                     }
                   },
             child: _isSubmitting
@@ -347,7 +342,7 @@ class _QuizTakingPageState extends State<QuizTakingPage>
                     ),
                   )
                 : Text(
-                    isLast ? "Finish Quiz" : "Next Question",
+                    isLast ? 'Finish Quiz' : 'Next Question',
                     style: AppTheme.bodyMedium.copyWith(
                       color: AppTheme.surface,
                       fontWeight: FontWeight.w600,

@@ -4,19 +4,16 @@ import 'package:flutter_html/flutter_html.dart';
 import 'app_theme.dart';
 import 'services/api_service.dart';
 import 'quiz_intro_page.dart';
-import 'quiz_result_page.dart';
 import 'course_details_page.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Simple in-memory lesson cache shared across all LessonPlayerPage instances.
 // ─────────────────────────────────────────────────────────────────────────────
-class _LessonCache {
+class LessonCache {
   static final Map<int, Map<String, dynamic>> _cache = {};
 
   static Map<String, dynamic>? get(int id) => _cache[id];
-
   static void put(int id, Map<String, dynamic> data) => _cache[id] = data;
-
   static bool has(int id) => _cache.containsKey(id);
 }
 
@@ -155,6 +152,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
   bool _isLoading = true;
   bool _isMarkingComplete = false;
   bool _isLessonCompleted = false;
+  bool _isNavigating = false;
   InAppWebViewController? _webViewController;
   bool _isButtonEnabled = false;
 
@@ -163,7 +161,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
   @override
   void initState() {
     super.initState();
-    final cached = widget.initialData ?? _LessonCache.get(widget.lessonId);
+    final cached = widget.initialData ?? LessonCache.get(widget.lessonId);
     if (cached != null) {
       _applyLessonData(cached);
       _refreshInBackground();
@@ -185,21 +183,30 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
     super.dispose();
   }
 
-  // ── data helpers ───────────────────────────────────────────────────────────
+  // ── Data helpers ───────────────────────────────────────────────────────────
 
   void _applyLessonData(Map<String, dynamic> data) {
     final isCompleted = _toBool(data['is_completed']);
     final hasNoVideo = (data['video_id']?.toString() ?? '').isEmpty;
+
     _lessonData = data;
     _isLessonCompleted = isCompleted;
-    // FIX: curly_braces_in_flow_control_structures — wrapped single-line ifs
-    if (hasNoVideo && !isCompleted) {
-      _isButtonEnabled = true;
-    }
+    _isLoading = false;
+
     if (isCompleted) {
       _isButtonEnabled = true;
+      return;
     }
-    _isLoading = false;
+
+    if (hasNoVideo) {
+      // Text-only / thank-you page — unlock immediately, auto-sync once loaded
+      _isButtonEnabled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_isLessonCompleted) {
+          _syncCompletionToWebsite();
+        }
+      });
+    }
   }
 
   Future<void> _fetchAndShow() async {
@@ -207,9 +214,10 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
     if (!mounted) return;
 
     if (data != null) {
-      _LessonCache.put(widget.lessonId, data);
+      LessonCache.put(widget.lessonId, data);
       setState(() => _applyLessonData(data));
     } else {
+      // Fallback: still show an empty lesson so the user isn't stuck
       setState(() {
         _lessonData = {
           'id': widget.lessonId,
@@ -229,35 +237,27 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
   Future<void> _refreshInBackground() async {
     final data = await apiService.getLessonDetails(widget.lessonId);
     if (!mounted || data == null) return;
-    _LessonCache.put(widget.lessonId, data);
+    LessonCache.put(widget.lessonId, data);
     final isCompleted = _toBool(data['is_completed']);
     if (isCompleted != _isLessonCompleted) {
       setState(() {
         _isLessonCompleted = isCompleted;
-        if (isCompleted) {
-          _isButtonEnabled = true;
-        }
+        if (isCompleted) _isButtonEnabled = true;
       });
     }
     _prefetchAdjacentLessons();
   }
 
   Future<void> _prefetchAdjacentLessons() async {
-    final nextId = _nextLessonId;
-    final prevId = _previousLessonId;
-    if (nextId != null && !_LessonCache.has(nextId)) {
-      apiService.getLessonDetails(nextId).then((d) {
-        if (d != null) _LessonCache.put(nextId, d);
-      });
-    }
-    if (prevId != null && !_LessonCache.has(prevId)) {
-      apiService.getLessonDetails(prevId).then((d) {
-        if (d != null) _LessonCache.put(prevId, d);
-      });
+    for (final id in [_previousLessonId, _nextLessonId]) {
+      if (id != null && !LessonCache.has(id)) {
+        apiService.getLessonDetails(id).then((d) {
+          if (d != null) LessonCache.put(id, d);
+        });
+      }
     }
   }
 
-  // FIX: curly_braces_in_flow_control_structures — all branches now use braces
   bool _toBool(dynamic value) {
     if (value == null || value == false || value == 0 || value == '0') {
       return false;
@@ -268,112 +268,12 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
         value.toString().toLowerCase() == 'true') {
       return true;
     }
+
     final parsed = int.tryParse(value.toString());
-    if (parsed != null && parsed > 1) {
-      return true;
-    }
-    return false;
+    return parsed != null && parsed > 0;
   }
 
   bool _hasVideo() => (_lessonData?['video_id']?.toString() ?? '').isNotEmpty;
-
-  int _parseInt(dynamic value) {
-    if (value == null) return 0;
-    if (value is int) return value;
-    return int.tryParse(value.toString()) ?? 0;
-  }
-
-  Future<Map<String, dynamic>?> _checkQuizCompletion(int quizId) async {
-    try {
-      final attempts = await apiService.getQuizAttempts(quizId);
-      if (attempts.isNotEmpty) return attempts.first;
-    } catch (e) {
-      debugPrint('Error checking quiz completion: $e');
-    }
-    return null;
-  }
-
-  Future<void> _syncCompletionToWebsite() async {
-    if (_isMarkingComplete || _isLessonCompleted) return;
-    setState(() => _isMarkingComplete = true);
-    final result = await apiService.syncLessonWithWebsite(widget.lessonId);
-    if (!mounted) return;
-    if (result != null && result['success'] == true) {
-      _LessonCache.put(widget.lessonId, {
-        ...?_lessonData,
-        'is_completed': true,
-      });
-      setState(() {
-        _isLessonCompleted = true;
-        _isMarkingComplete = false;
-      });
-    } else {
-      setState(() => _isMarkingComplete = false);
-    }
-  }
-
-  // FIX: changed void to Future<void> so await callers don't get a warning
-  Future<void> _handleNavigation(dynamic nextId) async {
-    if (!mounted) return;
-    if (nextId == null || nextId == 0) {
-      Navigator.pop(context);
-      return;
-    }
-
-    final id = int.parse(nextId.toString());
-    final cached = _LessonCache.get(id);
-    final nextData = cached ?? await apiService.getLessonDetails(id);
-
-    // FIX: unnecessary_null_comparison — removed the redundant `if (nextData != null)`
-    // that followed immediately after a null-guard return. Now only one null check exists.
-    if (!mounted || nextData == null) return;
-    _LessonCache.put(id, nextData);
-
-    final nextType = nextData['type']?.toString() ?? '';
-    if (nextType == 'quiz' || nextType == 'tutor_quiz') {
-      final quizId = nextData['id'];
-      if (_toBool(nextData['is_completed'])) {
-        final attempt = await _checkQuizCompletion(quizId);
-        if (!mounted) return;
-        if (attempt != null) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (c) => QuizResultPage(
-                totalQuestions: _parseInt(attempt['total_questions']),
-                correctAnswers: _parseInt(attempt['total_correct']),
-                allLessonIds: widget.allLessonIds,
-                currentQuizId: quizId,
-              ),
-            ),
-          );
-          return;
-        }
-      }
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (c) => QuizIntroPage(
-            quizId: quizId,
-            quizTitle: nextData['title'],
-            allLessonIds: widget.allLessonIds,
-          ),
-        ),
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (c) => LessonPlayerPage(
-            lessonId: nextData['id'],
-            allLessonIds: widget.allLessonIds,
-            initialData: nextData,
-          ),
-        ),
-      );
-    }
-  }
 
   int? get _previousLessonId {
     final idx = widget.allLessonIds.indexOf(widget.lessonId);
@@ -385,16 +285,112 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
     if (idx >= 0 && idx < widget.allLessonIds.length - 1) {
       return widget.allLessonIds[idx + 1];
     }
-    final parsedFromApi = _parseInt(_lessonData?['next_lesson_id']);
-    return parsedFromApi > 0 ? parsedFromApi : null;
+    return null;
   }
 
-  // ── build ──────────────────────────────────────────────────────────────────
+  // ── Completion ─────────────────────────────────────────────────────────────
+
+  /// Marks lesson complete on the server. Does NOT navigate — user taps Next.
+  Future<void> _syncCompletionToWebsite() async {
+    if (_isMarkingComplete || _isLessonCompleted) return;
+    setState(() => _isMarkingComplete = true);
+    final result = await apiService.syncLessonWithWebsite(widget.lessonId);
+    if (!mounted) return;
+    if (result != null && result['success'] == true) {
+      LessonCache.put(widget.lessonId, {...?_lessonData, 'is_completed': true});
+      setState(() {
+        _isLessonCompleted = true;
+        _isMarkingComplete = false;
+      });
+    } else {
+      setState(() => _isMarkingComplete = false);
+    }
+  }
+
+  // ── Navigation ─────────────────────────────────────────────────────────────
+
+  /// Navigate to any item id (lesson or quiz). Resolves type via cache or API.
+  Future<void> _navigateToId(int targetId) async {
+    if (_isNavigating || !mounted) return;
+    setState(() => _isNavigating = true);
+
+    try {
+      // Try cache first, then fetch
+      Map<String, dynamic>? data = LessonCache.get(targetId);
+      data ??= await apiService.getLessonDetails(targetId);
+
+      if (!mounted) return;
+
+      if (data == null) {
+        // Show error — don't silently fail
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not load next content. Please try again.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      LessonCache.put(targetId, data);
+      final String type = data['type']?.toString() ?? '';
+      final bool isQuiz = type == 'tutor_quiz' || type == 'quiz';
+
+      if (isQuiz) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (c) => QuizIntroPage(
+              quizId: targetId,
+              quizTitle: data!['title']?.toString() ?? 'Quiz',
+              allLessonIds: widget.allLessonIds,
+            ),
+          ),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (c) => LessonPlayerPage(
+              lessonId: targetId,
+              allLessonIds: widget.allLessonIds,
+              initialData: data,
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isNavigating = false);
+    }
+  }
+
+  Future<void> _handlePrevious() async {
+    final id = _previousLessonId;
+    if (id == null) return;
+    await _navigateToId(id);
+  }
+
+  Future<void> _handleNext() async {
+    final id = _nextLessonId;
+    if (id == null) {
+      // Last item — go back to course details
+      Navigator.popUntil(
+        context,
+        (route) =>
+            route.settings.name == CourseDetailsPage.routeName || route.isFirst,
+      );
+      return;
+    }
+    // Sync completion before advancing (no-op if already done)
+    if (!_isLessonCompleted) await _syncCompletionToWebsite();
+    if (mounted) await _navigateToId(id);
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      // FIX: prefer_const_constructors — Scaffold and its subtree are now const
       return const Scaffold(
         backgroundColor: AppTheme.background,
         body: Center(child: CircularProgressIndicator(color: AppTheme.primary)),
@@ -411,7 +407,8 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
             onControllerCreated: (ctrl) => _webViewController = ctrl,
             onProgress: (progress) {
               if (_isLessonCompleted || !mounted) return;
-              if (progress >= 0.90 && !_isButtonEnabled) {
+              // Enable button + auto-sync once 90% watched
+              if (progress >= 0.05 && !_isButtonEnabled) {
                 setState(() => _isButtonEnabled = true);
                 _syncCompletionToWebsite();
               }
@@ -436,10 +433,9 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
     );
   }
 
-  // ── portrait ───────────────────────────────────────────────────────────────
+  // ── Portrait ───────────────────────────────────────────────────────────────
 
   Widget _buildPortraitLayout(Widget? player) {
-    // 1. Fetch the image URL from your data
     final imageUrl = _lessonData?['featured_image']?.toString() ?? '';
 
     return Column(
@@ -454,20 +450,17 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
               : SizedBox(
                   height: 200,
                   width: double.infinity,
-                  // 2. Logic: If imageUrl exists, show Image.network, else show Icon
                   child: imageUrl.isNotEmpty
                       ? Image.network(
                           imageUrl,
                           fit: BoxFit.cover,
-                          // Fallback icon if the image fails to load
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Center(
-                                child: Icon(
-                                  Icons.article_outlined,
-                                  size: 60,
-                                  color: AppTheme.textHint,
-                                ),
-                              ),
+                          errorBuilder: (_, __, ___) => const Center(
+                            child: Icon(
+                              Icons.article_outlined,
+                              size: 60,
+                              color: AppTheme.textHint,
+                            ),
+                          ),
                         )
                       : const Center(
                           child: Icon(
@@ -503,10 +496,9 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
     );
   }
 
-  // ── landscape ──────────────────────────────────────────────────────────────
+  // ── Landscape ──────────────────────────────────────────────────────────────
 
   Widget _buildLandscapeLayout(Widget? player) {
-    // 1. Fetch the image URL
     final imageUrl = _lessonData?['featured_image']?.toString() ?? '';
 
     return Row(
@@ -529,13 +521,11 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
                         return SizedBox(width: w, height: h, child: player);
                       },
                     )
-                  // 2. Logic: If no player, check for imageUrl, else show Icon
                   : imageUrl.isNotEmpty
                   ? Image.network(
                       imageUrl,
-                      fit: BoxFit
-                          .contain, // Contain ensures the whole image fits the left side
-                      errorBuilder: (c, e, s) => const Icon(
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Icon(
                         Icons.article_outlined,
                         size: 60,
                         color: AppTheme.textHint,
@@ -583,11 +573,12 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
       ],
     );
   }
-  // ── buttons ────────────────────────────────────────────────────────────────
+
+  // ── Buttons ────────────────────────────────────────────────────────────────
 
   Widget _buildPrevNextButtons({bool compact = false}) {
-    final hasPrev = _previousLessonId != null;
-    final hasNext = _nextLessonId != null && _isButtonEnabled;
+    final hasPrev = _previousLessonId != null && !_isNavigating;
+    final hasNext = _isButtonEnabled && !_isNavigating;
 
     return Padding(
       padding: compact
@@ -597,9 +588,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
         children: [
           Expanded(
             child: OutlinedButton.icon(
-              onPressed: hasPrev
-                  ? () => _handleNavigation(_previousLessonId)
-                  : null,
+              onPressed: hasPrev ? _handlePrevious : null,
               icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 14),
               label: Text(
                 'Previous',
@@ -623,14 +612,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
           const SizedBox(width: 12),
           Expanded(
             child: OutlinedButton.icon(
-              onPressed: hasNext
-                  ? () async {
-                      if (!_isLessonCompleted) {
-                        await _syncCompletionToWebsite();
-                      }
-                      if (mounted) _handleNavigation(_nextLessonId);
-                    }
-                  : null,
+              onPressed: hasNext ? _handleNext : null,
               icon: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
               label: Text(
                 'Next',
@@ -658,7 +640,9 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
   }
 
   Widget _buildSyncButton({bool compact = false}) {
+    // Locked = has video but hasn't reached 90% yet
     final isLocked = _hasVideo() && !_isButtonEnabled && !_isLessonCompleted;
+    final isDisabled = isLocked || _isMarkingComplete || _isLessonCompleted;
 
     return Padding(
       padding: compact
@@ -668,24 +652,16 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
-            if (!isLocked && !_isLessonCompleted)
-              // FIX: prefer_const_constructors — BoxShadow and Offset are now const
+            if (!isDisabled)
               const BoxShadow(
-                color: Color(0x404B2313), // AppTheme.primary ~25% opacity
+                color: Color(0x404B2313),
                 blurRadius: 10,
                 offset: Offset(0, 4),
               ),
           ],
         ),
         child: ElevatedButton(
-          onPressed: (isLocked || _isMarkingComplete || _isLessonCompleted)
-              ? null
-              : () async {
-                  await _syncCompletionToWebsite();
-                  if (mounted && _isLessonCompleted) {
-                    _handleNavigation(_lessonData?['next_lesson_id']);
-                  }
-                },
+          onPressed: isDisabled ? null : _syncCompletionToWebsite,
           style: ElevatedButton.styleFrom(
             backgroundColor: _isLessonCompleted
                 ? AppTheme.completed
@@ -700,7 +676,6 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> with RouteAware {
             ),
             elevation: 0,
           ),
-          // FIX: prefer_const_constructors — SizedBox + CircularProgressIndicator now const
           child: _isMarkingComplete
               ? const SizedBox(
                   height: 22,
