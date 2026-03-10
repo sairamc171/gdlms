@@ -133,8 +133,6 @@ class AppTheme {
   static BoxDecoration get cardDecoration => BoxDecoration(
     color: surface,
     borderRadius: BorderRadius.circular(20),
-    // FIX: prefer_const_literals_to_create_immutables + prefer_const_constructors
-    // — list literal and BoxShadow are now const
     boxShadow: const [
       BoxShadow(color: cardShadow, blurRadius: 24, offset: Offset(0, 6)),
     ],
@@ -165,6 +163,11 @@ class AppTheme {
       elevation: 0,
       surfaceTintColor: Colors.transparent,
       foregroundColor: foreground,
+      // FIX: explicitly suppress the back button when showBack is false.
+      // Without these two lines, Flutter still renders a back arrow whenever
+      // there is a route beneath this page on the navigator stack.
+      automaticallyImplyLeading: showBack,
+      leading: showBack ? null : const SizedBox.shrink(),
       actions: actions,
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
@@ -184,7 +187,6 @@ class AppTheme {
             child: LinearProgressIndicator(
               value: progress / 100,
               backgroundColor: const Color(0x0F000000),
-              // FIX: prefer_const_constructors — AlwaysStoppedAnimation is now const
               valueColor: const AlwaysStoppedAnimation<Color>(primary),
               minHeight: 3,
             ),
@@ -209,13 +211,7 @@ class AppTheme {
   // ── Full MaterialTheme ────────────────────────────────────────────────────
 
   static ThemeData get themeData => ThemeData(
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: primary,
-      surface: surface,
-      // FIX: deprecated_member_use — 'background' removed, mapped to 'surface'
-      // as recommended by Flutter v3.18+. The scaffoldBackgroundColor below
-      // keeps the warm off-white background for scaffold separately.
-    ),
+    colorScheme: ColorScheme.fromSeed(seedColor: primary, surface: surface),
     scaffoldBackgroundColor: background,
     textTheme: GoogleFonts.poppinsTextTheme(),
     appBarTheme: AppBarTheme(

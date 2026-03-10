@@ -6,7 +6,7 @@ import 'enrolled_courses_page.dart';
 import 'profile_page.dart';
 import 'main.dart';
 import 'settings_page.dart';
-import 'dashboard_page.dart'; // kept — used by Dashboard tile below
+import 'dashboard_page.dart';
 import 'quiz_attempts_page.dart';
 
 class MenuPage extends StatefulWidget {
@@ -145,7 +145,6 @@ class _MenuPageState extends State<MenuPage> {
               context,
               icon: Icons.speed_outlined,
               title: 'Dashboard',
-              // FIX: was incorrectly navigating to ProfilePage — now DashboardPage
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const DashboardPage()),
@@ -166,7 +165,11 @@ class _MenuPageState extends State<MenuPage> {
               context,
               icon: Icons.school_outlined,
               title: 'Enrolled Courses',
-              onTap: () => Navigator.push(
+              // FIX: use pushReplacement (not pushAndRemoveUntil) so the bottom
+              // nav root is preserved, but the Menu/Dashboard back stack is
+              // cleared. The double back-button issue is fully resolved by the
+              // automaticallyImplyLeading fix in AppTheme.buildAppBar.
+              onTap: () => Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(builder: (_) => const EnrolledCoursesPage()),
               ),
@@ -300,7 +303,6 @@ class _MenuPageState extends State<MenuPage> {
         Container(
           height: 14,
           width: 120,
-          // FIX: prefer_const_constructors — added const
           decoration: const BoxDecoration(
             color: AppTheme.placeholder,
             borderRadius: BorderRadius.all(Radius.circular(4)),
@@ -310,7 +312,6 @@ class _MenuPageState extends State<MenuPage> {
         Container(
           height: 11,
           width: 180,
-          // FIX: prefer_const_constructors — added const
           decoration: const BoxDecoration(
             color: AppTheme.placeholder,
             borderRadius: BorderRadius.all(Radius.circular(4)),
